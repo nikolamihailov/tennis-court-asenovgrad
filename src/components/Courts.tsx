@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { MapPin, Sparkles, ArrowRight } from "lucide-react";
 
 const courts = [
@@ -6,21 +7,21 @@ const courts = [
     surface: "Глина",
     status: "Открит",
     price: "20 лв.",
-    photo: "from-orange-800/40 via-navy-800 to-navy-900",
+    photo: "/images/court.jpg",
   },
   {
     name: "Корт 2",
     surface: "Глина",
     status: "Открит",
     price: "20 лв.",
-    photo: "from-orange-800/40 via-navy-800 to-navy-900",
+    photo: "/images/court.jpg",
   },
   {
     name: "Корт 3",
     surface: "Твърда настилка",
     status: "Закрит",
     price: "25 лв.",
-    photo: "from-sky-800/30 via-navy-800 to-navy-900",
+    photo: "/images/court.jpg",
   },
 ];
 
@@ -49,8 +50,15 @@ export default function Courts() {
             key={c.name}
             className="overflow-hidden rounded-2xl bg-navy-800 border border-white/5"
           >
-            {/* Court photo placeholder — swap for a real photo of this court */}
-            <div className={`h-44 w-full bg-gradient-to-br ${c.photo}`} />
+            <div className="relative h-44 w-full">
+              <Image
+                src={c.photo}
+                alt={`${c.name} - тенис корт`}
+                fill
+                sizes="(min-width: 768px) 33vw, 100vw"
+                className="object-cover"
+              />
+            </div>
 
             <div className="p-5">
               <h3 className="font-semibold">{c.name}</h3>
