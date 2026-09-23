@@ -200,8 +200,32 @@ Neon is Vercel's own Postgres offering, so it needs no separate account:
 2. Vercel injects `DATABASE_URL` (and related vars) into all environments automatically.
 3. Add `DIRECT_URL` manually — copy the **unpooled** string from the Neon dashboard.
 4. Add the remaining variables from the table above.
-5. `prisma migrate deploy` runs as part of the Vercel build (see the `build` script), so
-   deploying the app also applies pending migrations.
+5. Apply migrations yourself — the build does **not** do it:
+   ```powershell
+   $env:DIRECT_URL="<neon direct/unpooled url>"
+   npm run db:deploy
+   npm run db:seed      # first time only, with SEED_ADMIN_EMAIL set
+   ```
+
+`DIRECT_URL` is optional on Vercel-style setups: `prisma/database-url.ts` finds the
+unpooled connection under whatever name the Neon integration injected, and falls back to
+rewriting the `-pooler` host out of a pooled URL.
+
+#### Why migrations are not part of the build
+
+`prisma migrate deploy` was originally in the `build` script. It was taken out because:
+
+- It couples every deploy to database availability. An app-only change cannot ship if the
+  database is briefly unreachable.
+- Concurrent builds — a production deploy and a preview, say — both run it against the
+  same database and race for Prisma's migration advisory lock. The loser dies with
+  `P1002: Timed out trying to acquire a postgres advisory lock` after 10s.
+- A schema change is worth doing deliberately, not as a side effect of `git push`.
+
+The trade-off is that deploying a migration is now two steps, and forgetting the first one
+shows up as a runtime error rather than a failed build. The alternative —
+`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` — is not used: that lock is what stops two
+concurrent migrations from corrupting each other, and disabling it treats the symptom.
 
 For local development, `.env.local` can point at the same Neon branch or a local Postgres.
 The exclusion constraint needs the `btree_gist` extension, which the first migration

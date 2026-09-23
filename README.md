@@ -72,7 +72,7 @@ Open http://localhost:3000.
 | Script | What it does |
 | --- | --- |
 | `npm run dev` | Development server |
-| `npm run build` | `prisma generate` → `prisma migrate deploy` → `next build` |
+| `npm run build` | `prisma generate` → `next build`. Needs no database. |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
 | `npm run db:migrate` | Create and apply a migration (development) |
@@ -100,5 +100,23 @@ The app deploys to Vercel. Add a Neon database from the project's **Storage** ta
 injects `DATABASE_URL` automatically. Add `DIRECT_URL` (Neon's *unpooled* string) and the
 rest of the variables from `.env.example` yourself.
 
-`npm run build` runs `prisma migrate deploy`, so deploying also applies pending
-migrations. See [ROADMAP.md](./ROADMAP.md#deploying-the-database) for the full checklist.
+### Migrations are not run by the build
+
+The build is `prisma generate && next build` and never touches the database. Apply
+migrations yourself, from a machine that can reach the database:
+
+```bash
+# PowerShell
+$env:DIRECT_URL="postgresql://...neon.tech/neondb?sslmode=require"
+npm run db:deploy
+```
+
+This is deliberate. Running `migrate deploy` inside the build couples every deploy to
+database availability, so an unrelated hiccup blocks shipping app-only changes — and when
+two deploys build at once, they race for Prisma's migration advisory lock and one fails
+with `P1002`. Migrations are also a change you want to make on purpose, not as a side
+effect of pushing.
+
+Order matters when a release contains a migration: apply it **before** the new code is
+live if the change is additive, and see [ROADMAP.md](./ROADMAP.md#deploying-the-database)
+for the full checklist.
