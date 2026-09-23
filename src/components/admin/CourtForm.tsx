@@ -69,7 +69,7 @@ export default function CourtForm({
         <Field
           idPrefix={idPrefix}
           name="pricePerHour"
-          label="Цена на час (лв.)"
+          label="Цена на час (€)"
           type="number"
           step="0.01"
           min="0"

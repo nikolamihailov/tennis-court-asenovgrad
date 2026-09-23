@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/dal";
 import { formatClubDateShort, formatClubTime, formatClubWeekday } from "@/lib/time";
 import { listBookings } from "@/server/bookings";
 import { listAllCourts } from "@/server/courts";
+import { formatEur } from "@/lib/pricing";
 import type { BookingStatus } from "@/generated/prisma/enums";
 
 const STATUS_FILTERS = [
@@ -161,7 +162,7 @@ export default async function AdminBookingsPage({
                     </p>
                   </td>
                   <td className="px-5 py-3 text-right font-medium">
-                    {booking.totalPrice.toFixed(2)} лв.
+                    {formatEur(booking.totalPrice)}
                   </td>
                   <td className="px-5 py-3">
                     <span

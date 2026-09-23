@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarCheck, Mail } from "lucide-react";
 
+import { formatEur } from "@/lib/pricing";
 import {
   formatClubDateLong,
   formatClubTime,
@@ -56,7 +57,11 @@ export default async function BookingConfirmationPage({
             label="Час"
             value={`${formatClubTime(booking.startsAt)} – ${formatClubTime(booking.endsAt)}`}
           />
-          <Row label="Цена" value={`${booking.totalPrice.toFixed(2)} лв.`} />
+          {booking.racketCount > 0 && (
+            <Row label="Ракети" value={`${booking.racketCount} бр.`} />
+          )}
+          {booking.lighting && <Row label="Осветление" value="включено" />}
+          <Row label="Общо" value={formatEur(booking.totalPrice)} />
           <Row
             label="На името на"
             value={

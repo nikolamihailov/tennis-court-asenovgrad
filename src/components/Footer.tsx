@@ -1,9 +1,13 @@
 export default function Footer() {
+  // Read at render rather than hardcoded, so the notice does not silently go stale
+  // every January. The footer is inside a dynamic route, so this is evaluated per request.
+  const year = new Date().getFullYear();
+
   return (
     <footer className="border-t border-white/5 bg-navy-950">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-6 text-xs text-white/50 sm:flex-row">
         <p>Тенис клуб Асеновград</p>
-        <p>© 2025 Тенис клуб Асеновград. Всички права запазени.</p>
+        <p>© {year} Тенис клуб Асеновград. Всички права запазени.</p>
         <div className="flex items-center gap-4">
           <a href="#" aria-label="Facebook" className="hover:text-white">
             <FacebookIcon />

@@ -3,6 +3,7 @@ import "server-only";
 import { Resend } from "resend";
 
 import { formatClubDateLong, formatClubTime, formatClubWeekday } from "./time";
+import { formatEur, LIGHTING_PRICE, RACKET_PRICE } from "./pricing";
 import type { BookingDTO } from "@/server/bookings";
 
 const FROM_FALLBACK = "Тенис клуб Асеновград <onboarding@resend.dev>";
@@ -10,6 +11,24 @@ const FROM_FALLBACK = "Тенис клуб Асеновград <onboarding@rese
 function getResend(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
   return apiKey ? new Resend(apiKey) : null;
+}
+
+/** The chargeable extras, as label/value rows. Empty when the customer added none. */
+function bookingExtraRows(booking: BookingDTO): [string, string][] {
+  const rows: [string, string][] = [];
+
+  if (booking.racketCount > 0) {
+    rows.push([
+      `Ракети (${booking.racketCount} бр.)`,
+      formatEur(booking.racketCount * RACKET_PRICE),
+    ]);
+  }
+
+  if (booking.lighting) {
+    rows.push(["Осветление", formatEur(LIGHTING_PRICE)]);
+  }
+
+  return rows;
 }
 
 function customerName(booking: BookingDTO): string {
@@ -26,7 +45,8 @@ function bookingConfirmationHtml(booking: BookingDTO): string {
     ["Корт", booking.court.name],
     ["Дата", `${formatClubWeekday(booking.startsAt)}, ${formatClubDateLong(booking.startsAt)}`],
     ["Час", `${formatClubTime(booking.startsAt)} – ${formatClubTime(booking.endsAt)}`],
-    ["Цена", `${booking.totalPrice.toFixed(2)} лв.`],
+    ...bookingExtraRows(booking),
+    ["Общо за плащане", formatEur(booking.totalPrice)],
   ];
 
   const rowsHtml = rows
@@ -82,7 +102,8 @@ function bookingConfirmationText(booking: BookingDTO): string {
     `Корт: ${booking.court.name}`,
     `Дата: ${formatClubWeekday(booking.startsAt)}, ${formatClubDateLong(booking.startsAt)}`,
     `Час: ${formatClubTime(booking.startsAt)} – ${formatClubTime(booking.endsAt)}`,
-    `Цена: ${booking.totalPrice.toFixed(2)} лв.`,
+    ...bookingExtraRows(booking).map(([label, value]) => `${label}: ${value}`),
+    `Общо за плащане: ${formatEur(booking.totalPrice)}`,
     "",
     "Моля, елате 10 минути по-рано.",
     "Тенис клуб Асеновград",

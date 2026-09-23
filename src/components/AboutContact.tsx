@@ -53,9 +53,17 @@ export default function AboutContact() {
           </ul>
         </div>
 
-        {/* Map placeholder — swap for an embedded Google Map */}
-        <div className="flex min-h-[140px] items-center justify-center rounded-xl bg-white/5">
-          <MapPin size={28} className="text-brand-400" />
+        {/* Satellite view of the club. `loading="lazy"` keeps Google's script and its
+            cookies off the initial page load — the map sits below the fold. */}
+        <div className="overflow-hidden rounded-xl bg-white/5">
+          <iframe
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1040.9678481726273!2d24.864133653244494!3d42.010591676984426!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x14acd8dc2fc2656b%3A0xaecc65546efcf7a7!2z0KLQtdC90LjRgSDQutC70YPQsSAi0JDRgdC10L3QvtCy0LPRgNCw0LQi!5e1!3m2!1sbg!2sbg!4v1790171819454!5m2!1sbg!2sbg"
+            title="Тенис клуб Асеновград на картата"
+            className="h-full min-h-55 w-full border-0"
+            loading="lazy"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
         </div>
       </div>
     </section>

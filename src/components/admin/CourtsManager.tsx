@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 
 import CourtForm from "./CourtForm";
+import { formatEur } from "@/lib/pricing";
 import { setCourtActiveAction } from "@/server/actions/admin";
 import type { CourtDTO } from "@/server/courts";
 
@@ -60,7 +61,7 @@ export default function CourtsManager({ courts }: { courts: CourtDTO[] }) {
                     {court.isIndoor ? "закрит" : "открит"} ·{" "}
                     {String(court.openingHour).padStart(2, "0")}:00–
                     {String(court.closingHour).padStart(2, "0")}:00 ·{" "}
-                    {court.pricePerHour.toFixed(2)} лв./час
+                    {formatEur(court.pricePerHour)}/час
                   </p>
                 </div>
 

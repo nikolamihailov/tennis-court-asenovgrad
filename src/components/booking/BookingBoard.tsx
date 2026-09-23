@@ -5,6 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Loader2, MapPin, Sparkles } from "lucide-react";
 
 import { createBookingAction, type BookingFormState } from "@/server/actions/booking";
+import {
+  bookingTotal,
+  formatEur,
+  LIGHTING_PRICE,
+  MAX_RACKETS,
+  RACKET_PRICE,
+} from "@/lib/pricing";
 import type { CourtAvailability } from "@/server/availability";
 
 const SURFACE_LABEL: Record<string, string> = {
@@ -19,7 +26,13 @@ type CurrentUser = {
   phone: string | null;
 };
 
-type Selection = { courtId: string; courtName: string; hour: number; price: number };
+type Selection = {
+  courtId: string;
+  courtName: string;
+  hour: number;
+  price: number;
+  isIndoor: boolean;
+};
 
 export default function BookingBoard({
   availability,
@@ -39,6 +52,20 @@ export default function BookingBoard({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [racketCount, setRacketCount] = useState(0);
+  const [lighting, setLighting] = useState(false);
+
+  // Lighting is only sold on outdoor courts; the indoor one is lit anyway.
+  const canAddLighting = selection ? !selection.isIndoor : false;
+
+  const total = selection
+    ? bookingTotal({
+        pricePerHour: selection.price,
+        racketCount,
+        lighting,
+        isIndoor: selection.isIndoor,
+      })
+    : 0;
 
   const [state, formAction, pending] = useActionState<BookingFormState, FormData>(
     createBookingAction,
@@ -123,7 +150,7 @@ export default function BookingBoard({
                     </div>
                   </div>
                   <p className="text-sm font-semibold">
-                    {court.pricePerHour.toFixed(2)} лв.
+                    {formatEur(court.pricePerHour)}
                     <span className="font-normal text-white/50"> / час</span>
                   </p>
                 </div>
@@ -144,14 +171,18 @@ export default function BookingBoard({
                           type="button"
                           disabled={!slot.available}
                           aria-pressed={isSelected}
-                          onClick={() =>
+                          onClick={() => {
                             setSelection({
                               courtId: court.id,
                               courtName: court.name,
                               hour: slot.hour,
                               price: court.pricePerHour,
-                            })
-                          }
+                              isIndoor: court.isIndoor,
+                            });
+                            // Lighting is not offered indoors, so a leftover tick from a
+                            // previously selected outdoor court must not carry over.
+                            if (court.isIndoor) setLighting(false);
+                          }}
                           title={
                             slot.reason === "booked"
                               ? "Часът е зает"
@@ -203,7 +234,66 @@ export default function BookingBoard({
                     selection.hour + 1,
                   ).padStart(2, "0")}:00`}
                 />
-                <Row label="Цена" value={`${selection.price.toFixed(2)} лв.`} />
+              </dl>
+
+              <div className="space-y-3 rounded-lg border border-white/10 bg-navy-900 p-4">
+                <p className="text-xs uppercase tracking-wide text-white/40">Допълнително</p>
+
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="racketCount" className="text-sm">
+                    Ракети под наем
+                    <span className="block text-xs text-white/40">
+                      {formatEur(RACKET_PRICE)} за брой
+                    </span>
+                  </label>
+                  <select
+                    id="racketCount"
+                    name="racketCount"
+                    value={racketCount}
+                    onChange={(event) => setRacketCount(Number(event.target.value))}
+                    className="rounded-lg border border-white/10 bg-navy-800 px-3 py-2 text-sm outline-none focus:border-brand-500"
+                  >
+                    {Array.from({ length: MAX_RACKETS + 1 }, (_, count) => (
+                      <option key={count} value={count} className="bg-navy-900">
+                        {count}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {canAddLighting && (
+                  <label className="flex items-start gap-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      name="lighting"
+                      checked={lighting}
+                      onChange={(event) => setLighting(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-white/20 bg-navy-800 accent-brand-500"
+                    />
+                    <span>
+                      Осветление
+                      <span className="block text-xs text-white/40">
+                        {formatEur(LIGHTING_PRICE)} — за игра по тъмно на открит корт
+                      </span>
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              <dl className="space-y-1.5 rounded-lg bg-navy-900 p-4 text-sm">
+                <Row label="Корт (1 час)" value={formatEur(selection.price)} />
+                {racketCount > 0 && (
+                  <Row
+                    label={`Ракети × ${racketCount}`}
+                    value={formatEur(racketCount * RACKET_PRICE)}
+                  />
+                )}
+                {lighting && canAddLighting && (
+                  <Row label="Осветление" value={formatEur(LIGHTING_PRICE)} />
+                )}
+                <div className="mt-1 border-t border-white/10 pt-2">
+                  <Row label="Общо" value={formatEur(total)} strong />
+                </div>
               </dl>
 
               {currentUser ? (
@@ -293,11 +383,19 @@ export default function BookingBoard({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-white/50">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      <dt className={strong ? "font-semibold" : "text-white/50"}>{label}</dt>
+      <dd className={strong ? "font-semibold" : "font-medium"}>{value}</dd>
     </div>
   );
 }
