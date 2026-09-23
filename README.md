@@ -12,7 +12,7 @@ See [ROADMAP.md](./ROADMAP.md) for what shipped in each version and what was def
 - Tailwind CSS 4
 - Prisma 7 + PostgreSQL (Neon)
 - Auth.js v5 (NextAuth) — Google SSO
-- Resend for transactional email
+- SendGrid for transactional email
 - Zod for input validation
 
 ## Layout

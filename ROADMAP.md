@@ -102,7 +102,7 @@ without a query on every request.
 - [x] Booking as a logged-in user (identity taken from the session, not the form)
 - [x] Booking as a guest (first name, last name, email required; phone optional)
 - [x] Live availability — the booking widget queries real free slots instead of `console.log`
-- [x] Confirmation email via Resend, in Bulgarian, with the booking reference
+- [x] Confirmation email in Bulgarian, with the booking reference and price breakdown
 - [x] `/my-bookings` — a signed-in customer's own upcoming and past bookings, read-only
 - [x] Admin: courts CRUD (create, edit, price, opening hours, activate/deactivate)
 - [x] Admin: bookings list with filters and search, plus cancelling to free the court
@@ -179,8 +179,9 @@ Not bugs — decisions to keep 0.1.0 shippable:
 | `AUTH_SECRET` | yes | `npx auth secret`, or `openssl rand -base64 32`. |
 | `AUTH_URL` | prod only | e.g. `https://your-domain.com`. Vercel usually infers this. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | yes | Google Cloud Console → OAuth client. |
-| `RESEND_API_KEY` | no | Without it, emails are logged to the console instead of sent. |
-| `RESEND_FROM_EMAIL` | no | Defaults to Resend's `onboarding@resend.dev` sandbox sender. |
+| `SENDGRID_API_KEY` | no | Without it, emails are logged to the console instead of sent. |
+| `SENDGRID_FROM_EMAIL` | no | Must be the address verified under Single Sender Verification. |
+| `SENDGRID_FROM_NAME` | no | Display name. Defaults to `Тенис клуб Асеновград`. |
 | `SEED_ADMIN_EMAIL` | no | Seeding with this set creates/promotes that account to `ADMIN`. |
 
 #### Google OAuth redirect URIs

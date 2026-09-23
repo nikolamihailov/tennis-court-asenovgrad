@@ -1,16 +1,82 @@
 import "server-only";
 
-import { Resend } from "resend";
-
 import { formatClubDateLong, formatClubTime, formatClubWeekday } from "./time";
 import { formatEur, LIGHTING_PRICE, RACKET_PRICE } from "./pricing";
 import type { BookingDTO } from "@/server/bookings";
 
-const FROM_FALLBACK = "Тенис клуб Асеновград <onboarding@resend.dev>";
+/**
+ * Transactional email via SendGrid.
+ *
+ * SendGrid is used rather than Resend because it can verify a single *address* instead of
+ * requiring a whole domain, which lets the club send from an existing mailbox without
+ * owning a domain yet. The trade-off is real: mail sent from a free provider's domain
+ * (abv.bg, gmail.com) through a third party fails SPF alignment, so some of it lands in
+ * spam. When the club has its own domain, verifying it — here or back on Resend — is the
+ * proper fix.
+ *
+ * SENDGRID_FROM_EMAIL must be exactly the address verified under Single Sender
+ * Verification. SendGrid rejects anything else with a 403.
+ */
+const SENDGRID_ENDPOINT = "https://api.sendgrid.com/v3/mail/send";
 
-function getResend(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY;
-  return apiKey ? new Resend(apiKey) : null;
+const DEFAULT_FROM_NAME = "Тенис клуб Асеновград";
+
+type Message = {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+};
+
+/**
+ * Send one message. Returns an error string, or null on success.
+ *
+ * Deliberately returns rather than throws: a booking is already committed by the time
+ * this runs, and must never be reported to the customer as failed because email was down.
+ */
+async function send(message: Message): Promise<string | null> {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const from = process.env.SENDGRID_FROM_EMAIL;
+
+  if (!apiKey || !from) {
+    console.info(
+      `[mail] SENDGRID_API_KEY/SENDGRID_FROM_EMAIL not set — would have sent "${message.subject}" to ${message.to}`,
+    );
+    return null;
+  }
+
+  // SendGrid requires text/plain before text/html in the content array.
+  const content: { type: string; value: string }[] = [
+    { type: "text/plain", value: message.text },
+  ];
+  if (message.html) content.push({ type: "text/html", value: message.html });
+
+  try {
+    const response = await fetch(SENDGRID_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: message.to }] }],
+        from: {
+          email: from,
+          name: process.env.SENDGRID_FROM_NAME || DEFAULT_FROM_NAME,
+        },
+        subject: message.subject,
+        content,
+      }),
+    });
+
+    // A successful send is 202 with an empty body.
+    if (response.ok) return null;
+
+    const body = await response.text();
+    return `${response.status} ${response.statusText} ${body}`.trim();
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 /** The chargeable extras, as label/value rows. Empty when the customer added none. */
@@ -121,44 +187,27 @@ function escapeHtml(value: string): string {
 /**
  * Send the booking confirmation.
  *
- * Never throws. A booking that is already committed must not be reported as failed
- * because an email provider had a bad minute — the caller logs and moves on. Without
- * RESEND_API_KEY the message is logged instead of sent, so local development and
- * preview deploys work without credentials.
+ * Never throws. The booking is already committed by the time this runs, so a provider
+ * outage must not surface to the customer as a failed booking. Failures are logged with
+ * the reference so they can be found later in the runtime logs.
  */
 export async function sendBookingConfirmation(booking: BookingDTO): Promise<void> {
-  const resend = getResend();
-  const to = booking.user.email;
+  const error = await send({
+    to: booking.user.email,
+    subject: `Резервация ${booking.reference} — Тенис клуб Асеновград`,
+    text: bookingConfirmationText(booking),
+    html: bookingConfirmationHtml(booking),
+  });
 
-  if (!resend) {
-    console.info(
-      `[mail] RESEND_API_KEY not set — would have sent confirmation ${booking.reference} to ${to}`,
+  if (error) {
+    console.error(
+      `[mail] failed to send confirmation ${booking.reference} to ${booking.user.email}: ${error}`,
     );
-    return;
-  }
-
-  try {
-    const { error } = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || FROM_FALLBACK,
-      to,
-      subject: `Резервация ${booking.reference} — Тенис клуб Асеновград`,
-      html: bookingConfirmationHtml(booking),
-      text: bookingConfirmationText(booking),
-    });
-
-    if (error) {
-      console.error(`[mail] failed to send ${booking.reference} to ${to}:`, error);
-    }
-  } catch (error) {
-    console.error(`[mail] failed to send ${booking.reference} to ${to}:`, error);
   }
 }
 
 /** Notify the customer that staff cancelled their booking. Never throws. */
 export async function sendBookingCancellation(booking: BookingDTO): Promise<void> {
-  const resend = getResend();
-  const to = booking.user.email;
-
   const lines = [
     `Здравейте, ${customerName(booking)}!`,
     "",
@@ -173,27 +222,15 @@ export async function sendBookingCancellation(booking: BookingDTO): Promise<void
 
   lines.push("", "Извиняваме се за неудобството.", "Тенис клуб Асеновград");
 
-  const text = lines.join("\n");
+  const error = await send({
+    to: booking.user.email,
+    subject: `Отказана резервация ${booking.reference}`,
+    text: lines.join("\n"),
+  });
 
-  if (!resend) {
-    console.info(
-      `[mail] RESEND_API_KEY not set — would have sent cancellation ${booking.reference} to ${to}`,
+  if (error) {
+    console.error(
+      `[mail] failed to send cancellation ${booking.reference} to ${booking.user.email}: ${error}`,
     );
-    return;
-  }
-
-  try {
-    const { error } = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || FROM_FALLBACK,
-      to,
-      subject: `Отказана резервация ${booking.reference}`,
-      text,
-    });
-
-    if (error) {
-      console.error(`[mail] failed to send cancellation ${booking.reference}:`, error);
-    }
-  } catch (error) {
-    console.error(`[mail] failed to send cancellation ${booking.reference}:`, error);
   }
 }
