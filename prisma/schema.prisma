@@ -1,0 +1,171 @@
+// Тенис клуб Асеновград — database schema
+// Docs: https://pris.ly/d/prisma-schema
+//
+// Prisma 7 notes:
+//   - the `prisma-client` generator requires an explicit `output`
+//   - the datasource has no `url`; the connection string lives in prisma7.config.ts
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum CourtSurface {
+  CLAY
+  HARD
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+/// One row per person, whether or not they ever sign in.
+///
+/// Guests who book get a row with `isGuest = true` and no linked Account. Booking again
+/// with the same email reuses the row, so a person has one identity and one history. If
+/// they later sign in with Google using that address, the sign-in claims this same row.
+///
+/// `name`, `emailVerified` and `image` are written by the Auth.js Prisma adapter and must
+/// stay nullable — the adapter's createUser() only ever sets those four columns, so
+/// firstName/lastName cannot be NOT NULL.
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+
+  firstName String?
+  lastName  String?
+  phone     String?
+  role      Role    @default(USER)
+  isGuest   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  bookings Booking[]
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+/// A bookable court. Opening hours are plain integers (8 -> 22) in Europe/Sofia local
+/// time; there is no separate schedule table until per-day hours are actually needed.
+model Court {
+  id           String       @id @default(cuid())
+  name         String
+  surface      CourtSurface @default(CLAY)
+  isIndoor     Boolean      @default(false)
+  pricePerHour Decimal      @db.Decimal(10, 2)
+  description  String?
+  imageUrl     String?
+  openingHour  Int          @default(8)
+  closingHour  Int          @default(22)
+  isActive     Boolean      @default(true)
+  sortOrder    Int          @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings Booking[]
+
+  @@index([isActive, sortOrder])
+}
+
+/// A reservation. `userId` is never null — see the User docblock for why guests get a row.
+///
+/// Overlapping CONFIRMED bookings on the same court are rejected by a btree_gist EXCLUDE
+/// constraint added in the `booking_overlap_exclusion` migration, not by application code.
+/// Prisma's schema language cannot express that constraint, so it lives in raw SQL.
+model Booking {
+  id         String        @id @default(cuid())
+  reference  String        @unique
+  courtId    String
+  userId     String
+  startsAt   DateTime      @db.Timestamptz(3)
+  endsAt     DateTime      @db.Timestamptz(3)
+  status     BookingStatus @default(CONFIRMED)
+  totalPrice Decimal       @db.Decimal(10, 2)
+  notes      String?
+
+  /// True when created through the guest flow, so admin can tell it apart from a
+  /// booking made by a signed-in user who happens to also have isGuest history.
+  bookedAsGuest Boolean @default(false)
+
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  court Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([courtId, startsAt])
+  @@index([userId, startsAt])
+  @@index([startsAt])
+  @@index([status, startsAt])
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth) tables. Shapes are dictated by @auth/prisma-adapter.
+// Authenticator/WebAuthn is intentionally omitted — the only provider is Google.
+// ---------------------------------------------------------------------------
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@index([userId])
+}
+
+/// Unused while the session strategy is "jwt" (see src/auth.ts), but kept so switching
+/// to database sessions is a config change rather than a migration.
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
