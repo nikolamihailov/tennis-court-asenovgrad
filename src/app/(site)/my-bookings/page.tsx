@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { requireUser } from "@/lib/dal";
 import { formatClubDateLong, formatClubTime, formatClubWeekday } from "@/lib/time";
+import { formatEur } from "@/lib/pricing";
 import { listUserBookingsGrouped, type BookingDTO } from "@/server/bookings";
 
 export const metadata: Metadata = {
@@ -72,7 +73,7 @@ function Section({
 
               <div className="flex items-center gap-4">
                 <span className="text-sm font-semibold">
-                  {booking.totalPrice.toFixed(2)} лв.
+                  {formatEur(booking.totalPrice)}
                 </span>
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-medium ${

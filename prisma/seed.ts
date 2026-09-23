@@ -18,14 +18,16 @@ const prisma = new PrismaClient({
 
 /**
  * The three courts the marketing site already advertised, now as real rows.
- * Prices and surfaces match what src/components/Courts.tsx used to hardcode.
+ *
+ * Prices are in euro. They were 20 / 20 / 25 lv., converted at the fixed rate of
+ * 1.95583 and rounded to whole euro, so the real price is unchanged for customers.
  */
 const courts = [
   {
     name: "Корт 1",
     surface: "CLAY" as const,
     isIndoor: false,
-    pricePerHour: 20,
+    pricePerHour: 10,
     description: "Класически глинен корт на открито.",
     imageUrl: "/images/court.jpg",
     openingHour: 8,
@@ -36,7 +38,7 @@ const courts = [
     name: "Корт 2",
     surface: "CLAY" as const,
     isIndoor: false,
-    pricePerHour: 20,
+    pricePerHour: 10,
     description: "Глинен корт на открито с вечерно осветление.",
     imageUrl: "/images/court.jpg",
     openingHour: 8,
@@ -47,7 +49,7 @@ const courts = [
     name: "Корт 3",
     surface: "HARD" as const,
     isIndoor: true,
-    pricePerHour: 25,
+    pricePerHour: 13,
     description: "Закрит корт с твърда настилка — игра при всякакво време.",
     imageUrl: "/images/court.jpg",
     openingHour: 8,
@@ -85,8 +87,9 @@ async function main() {
         email: adminEmail,
         role: "ADMIN",
         isGuest: false,
-        name: "Администратор",
-        firstName: "Администратор",
+        // Deliberately no name: the row is a placeholder until this person signs in with
+        // Google, and the linkAccount event then fills in their real name. Seeding a
+        // fake one here would stick forever, because there is nothing to overwrite it.
       },
       select: { email: true },
     });

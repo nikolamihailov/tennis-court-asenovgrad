@@ -11,6 +11,7 @@ import { requireAdmin } from "@/lib/dal";
 import { formatClubDateShort, formatClubTime } from "@/lib/time";
 import { getAnalytics, type AnalyticsRange } from "@/server/analytics";
 import { listBookings } from "@/server/bookings";
+import { formatEur } from "@/lib/pricing";
 
 const RANGES: AnalyticsRange[] = [7, 30, 90];
 
@@ -71,7 +72,7 @@ export default async function AdminDashboardPage({
         <Stat
           icon={<BanknoteIcon size={16} />}
           label="Оборот"
-          value={`${analytics.revenue.toFixed(2)} лв.`}
+          value={formatEur(analytics.revenue)}
           hint="по ценоразпис"
         />
         <Stat
@@ -157,7 +158,7 @@ export default async function AdminDashboardPage({
                     <td className="py-2.5">{court.name}</td>
                     <td className="py-2.5 text-right text-white/70">{court.bookings}</td>
                     <td className="py-2.5 text-right font-medium">
-                      {court.revenue.toFixed(2)} лв.
+                      {formatEur(court.revenue)}
                     </td>
                   </tr>
                 ))}

@@ -126,8 +126,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     /**
-     * An existing guest row being claimed by a Google sign-in. `createUser` does not fire
-     * for that case, so promote the row here.
+     * A Google sign-in claiming a row that already existed — either a guest who booked
+     * before, or an admin created by the seed. `createUser` does not fire in either case,
+     * so the row is promoted here instead.
+     *
+     * Names are filled in whenever they are missing, not only for guests, so a seeded
+     * admin ends up with their real name rather than a blank one. Existing values are
+     * never overwritten.
      */
     async linkAccount({ user }) {
       if (!user.id) return;
@@ -137,20 +142,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         select: { isGuest: true, firstName: true, lastName: true, name: true },
       });
 
-      if (!existing?.isGuest) return;
+      if (!existing) return;
 
-      const [firstName, ...rest] = (existing.name ?? user.name ?? "")
+      const [firstName, ...rest] = (user.name ?? existing.name ?? "")
         .trim()
         .split(/\s+/);
 
-      await db.user.update({
-        where: { id: user.id },
-        data: {
-          isGuest: false,
-          firstName: existing.firstName ?? firstName ?? null,
-          lastName: existing.lastName ?? (rest.length > 0 ? rest.join(" ") : null),
-        },
-      });
+      const patch: {
+        isGuest?: boolean;
+        name?: string;
+        firstName?: string;
+        lastName?: string;
+      } = {};
+
+      if (existing.isGuest) patch.isGuest = false;
+      if (!existing.name && user.name) patch.name = user.name;
+      if (!existing.firstName && firstName) patch.firstName = firstName;
+      if (!existing.lastName && rest.length > 0) patch.lastName = rest.join(" ");
+
+      if (Object.keys(patch).length > 0) {
+        await db.user.update({ where: { id: user.id }, data: patch });
+      }
     },
   },
 });

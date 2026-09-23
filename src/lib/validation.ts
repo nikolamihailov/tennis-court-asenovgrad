@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isValidIsoDate } from "./time";
+import { MAX_RACKETS } from "./pricing";
 
 const isoDate = z
   .string()
@@ -60,6 +61,19 @@ const bookingSlotSchema = z.object({
     .min(0, { error: "Невалиден час." })
     .max(23, { error: "Невалиден час." }),
   notes: optionalText(500),
+
+  racketCount: z.coerce
+    .number()
+    .int({ error: "Невалиден брой ракети." })
+    .min(0, { error: "Невалиден брой ракети." })
+    .max(MAX_RACKETS, { error: `Максимум ${MAX_RACKETS} ракети.` })
+    .default(0),
+
+  // An unchecked checkbox is simply absent from the FormData, so anything other than
+  // the checked value means "off".
+  lighting: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((value) => value === "on" || value === "true"),
 });
 
 /** A guest must identify themselves; there is no account to read the details from. */

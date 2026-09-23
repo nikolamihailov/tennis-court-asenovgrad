@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { clubDateHourToUtc, addDaysToIsoDate, clubToday } from "@/lib/time";
+import { bookingTotal, clampRackets } from "@/lib/pricing";
 import { BOOKING_HORIZON_DAYS, SLOT_DURATION_HOURS } from "./availability";
 import type { BookingStatus } from "@/generated/prisma/enums";
 
@@ -18,6 +19,8 @@ export type BookingDTO = {
   endsAt: Date;
   status: BookingStatus;
   totalPrice: number;
+  racketCount: number;
+  lighting: boolean;
   notes: string | null;
   bookedAsGuest: boolean;
   cancelledAt: Date | null;
@@ -88,6 +91,8 @@ export type CreateBookingInput = {
   hour: number;
   notes?: string;
   bookedAsGuest: boolean;
+  racketCount?: number;
+  lighting?: boolean;
 };
 
 /**
@@ -169,6 +174,7 @@ export async function createBooking(
     select: {
       id: true,
       isActive: true,
+      isIndoor: true,
       openingHour: true,
       closingHour: true,
       pricePerHour: true,
@@ -178,6 +184,26 @@ export async function createBooking(
   if (!court || !court.isActive) {
     throw new BookingError("Избраният корт не е достъпен.", "courtId");
   }
+
+  // Extras are re-derived here from the court's own record. The browser shows a running
+  // total, but it is only a preview — the form could claim any price, so nothing about
+  // the amount charged is taken from the request.
+  const racketCount = clampRackets(input.racketCount ?? 0);
+  const lighting = Boolean(input.lighting) && !court.isIndoor;
+
+  if (input.lighting && court.isIndoor) {
+    throw new BookingError(
+      "Закритият корт е с включено осветление.",
+      "lighting",
+    );
+  }
+
+  const totalPrice = bookingTotal({
+    pricePerHour: Number(court.pricePerHour.toString()),
+    racketCount,
+    lighting,
+    isIndoor: court.isIndoor,
+  });
 
   if (
     input.hour < court.openingHour ||
@@ -217,7 +243,9 @@ export async function createBooking(
           startsAt,
           endsAt,
           status: "CONFIRMED",
-          totalPrice: court.pricePerHour,
+          totalPrice,
+          racketCount,
+          lighting,
           notes: input.notes,
           bookedAsGuest: input.bookedAsGuest,
         },

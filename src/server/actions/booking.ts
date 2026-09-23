@@ -33,6 +33,8 @@ export async function createBookingAction(
     date: formData.get("date"),
     hour: formData.get("hour"),
     notes: formData.get("notes") || undefined,
+    racketCount: formData.get("racketCount") ?? 0,
+    lighting: formData.get("lighting"),
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),
     email: formData.get("email"),
@@ -41,7 +43,14 @@ export async function createBookingAction(
 
   let userId: string;
   let bookedAsGuest: boolean;
-  let slot: { courtId: string; date: string; hour: number; notes?: string };
+  let slot: {
+    courtId: string;
+    date: string;
+    hour: number;
+    notes?: string;
+    racketCount: number;
+    lighting: boolean;
+  };
 
   if (currentUser) {
     const parsed = userBookingSchema.safeParse(raw);

@@ -7,6 +7,7 @@ the same commit as the work it describes, and bump `version` in `package.json` t
 | Version | Status | Scope |
 | --- | --- | --- |
 | [0.1.0](#010--booking-backend) | ✅ shipped | Postgres + Prisma, courts/users/bookings, Google + guest booking, admin panel, confirmation email |
+| [0.1.1](#011--euro-pricing-and-booking-extras) | ✅ shipped | Euro pricing, rentable rackets, floodlight surcharge, embedded map |
 | [0.2.0](#020--planned) | 📋 planned | Customer account area, cancellation by customer, recurring slots |
 | [0.3.0](#030--planned) | 📋 planned | Payments (Stripe), SMS reminders |
 
@@ -205,6 +206,57 @@ Neon is Vercel's own Postgres offering, so it needs no separate account:
 For local development, `.env.local` can point at the same Neon branch or a local Postgres.
 The exclusion constraint needs the `btree_gist` extension, which the first migration
 enables; on a local instance this requires superuser rights the first time.
+
+---
+
+## 0.1.1 — Euro pricing and booking extras
+
+### Currency
+
+Bulgaria is on the euro, so every price is now in euro and formatted with
+`Intl.NumberFormat("bg-BG", { currency: "EUR" })` — which produces `10,00 €`, with a comma
+decimal separator and a trailing symbol, per Bulgarian convention.
+
+Existing court prices were **converted, not relabelled**: the fixed rate is 1.95583, so
+20 лв. → €10.23 and 25 лв. → €12.78, rounded to €10 and €13. The real price customers pay
+is unchanged. Had the numbers simply been relabelled, every court would have roughly
+doubled in price.
+
+`src/lib/pricing.ts` holds the rates, the total calculation and the formatter. It is
+deliberately free of `server-only` and of any database import, because the booking form
+computes a live preview in the browser while the server computes the authoritative total —
+sharing one module is what stops those two from drifting apart.
+
+### Booking extras
+
+Two optional add-ons, both priced per booking rather than per hour:
+
+| Extra | Price | Availability |
+| --- | --- | --- |
+| Rented racket | €1 each, max 4 | Any court |
+| Floodlights | €4 | Outdoor courts only |
+
+`Booking` gained `racketCount` and `lighting`, and `totalPrice` is now a computed sum
+rather than a copy of the court's hourly rate. It is still **stored**, not derived on
+read: repricing a court later must not silently rewrite what past customers were charged.
+
+The server recomputes the total from the court's own record and never trusts the form —
+the browser's running total is only a preview. Racket counts are clamped to 0–4 server
+side, and asking for lighting on the indoor court is rejected rather than silently
+charged.
+
+### Also
+
+- Footer copyright year is read from the clock instead of being hardcoded to 2025.
+- The contact section embeds a Google Map of the club, lazily loaded so Google's script
+  and cookies stay off the initial page load.
+
+### Verified
+
+- €10 court + 2 rackets + lighting = €16, and all three values persist.
+- Indoor court rejects a lighting request instead of charging for it.
+- A form claiming 99 rackets is clamped to 4 (€14, not €109); a negative count floors at 0.
+- The client-side preview and the server-side total agree for the same inputs.
 
 ---
 

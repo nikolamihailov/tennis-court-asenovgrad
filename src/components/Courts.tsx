@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Sparkles, ArrowRight } from "lucide-react";
 
+import { formatEur } from "@/lib/pricing";
 import type { CourtDTO } from "@/server/courts";
 
 const SURFACE_LABEL: Record<string, string> = {
@@ -68,7 +69,7 @@ export default function Courts({ courts }: { courts: CourtDTO[] }) {
 
                 <div className="mt-4 flex items-center justify-between">
                   <p className="font-semibold">
-                    {court.pricePerHour.toFixed(2)} лв.{" "}
+                    {formatEur(court.pricePerHour)}{" "}
                     <span className="text-sm text-white/50">/ час</span>
                   </p>
                   <Link
