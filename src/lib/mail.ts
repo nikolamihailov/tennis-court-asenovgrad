@@ -5,19 +5,19 @@ import { formatEur, LIGHTING_PRICE, RACKET_PRICE } from "./pricing";
 import type { BookingDTO } from "@/server/bookings";
 
 /**
- * Transactional email via SendGrid.
+ * Transactional email via Brevo.
  *
- * SendGrid is used rather than Resend because it can verify a single *address* instead of
- * requiring a whole domain, which lets the club send from an existing mailbox without
- * owning a domain yet. The trade-off is real: mail sent from a free provider's domain
- * (abv.bg, gmail.com) through a third party fails SPF alignment, so some of it lands in
- * spam. When the club has its own domain, verifying it — here or back on Resend — is the
- * proper fix.
+ * Brevo verifies a single sender *address* rather than a whole domain, which is what the
+ * club needs while it does not own one. Sent over Brevo's HTTP API rather than its SMTP
+ * relay: no dependency, no TLS handshake per message, and no connection pooling to reason
+ * about on serverless, where the process may be frozen between requests.
  *
- * SENDGRID_FROM_EMAIL must be exactly the address verified under Single Sender
- * Verification. SendGrid rejects anything else with a 403.
+ * The deliverability caveat still applies. Mail claiming to be from a free provider's
+ * domain (abv.bg) but sent through Brevo fails SPF alignment, so some of it will land in
+ * spam. Verifying a real domain — in Brevo, under Senders, Domains & Dedicated IPs — is
+ * the fix once the club has one, and needs no code change.
  */
-const SENDGRID_ENDPOINT = "https://api.sendgrid.com/v3/mail/send";
+const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
 const DEFAULT_FROM_NAME = "Тенис клуб Асеновград";
 
@@ -35,41 +35,37 @@ type Message = {
  * this runs, and must never be reported to the customer as failed because email was down.
  */
 async function send(message: Message): Promise<string | null> {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const from = process.env.SENDGRID_FROM_EMAIL;
+  const apiKey = process.env.BREVO_API_KEY;
+  const from = process.env.BREVO_FROM_EMAIL;
 
   if (!apiKey || !from) {
     console.info(
-      `[mail] SENDGRID_API_KEY/SENDGRID_FROM_EMAIL not set — would have sent "${message.subject}" to ${message.to}`,
+      `[mail] BREVO_API_KEY/BREVO_FROM_EMAIL not set — would have sent "${message.subject}" to ${message.to}`,
     );
     return null;
   }
 
-  // SendGrid requires text/plain before text/html in the content array.
-  const content: { type: string; value: string }[] = [
-    { type: "text/plain", value: message.text },
-  ];
-  if (message.html) content.push({ type: "text/html", value: message.html });
-
   try {
-    const response = await fetch(SENDGRID_ENDPOINT, {
+    const response = await fetch(BREVO_ENDPOINT, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+        "api-key": apiKey,
+        "content-type": "application/json",
+        accept: "application/json",
       },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: message.to }] }],
-        from: {
+        sender: {
           email: from,
-          name: process.env.SENDGRID_FROM_NAME || DEFAULT_FROM_NAME,
+          name: process.env.MAIL_FROM_NAME || DEFAULT_FROM_NAME,
         },
+        to: [{ email: message.to }],
         subject: message.subject,
-        content,
+        textContent: message.text,
+        ...(message.html ? { htmlContent: message.html } : {}),
       }),
     });
 
-    // A successful send is 202 with an empty body.
+    // A successful send is 201 with a messageId.
     if (response.ok) return null;
 
     const body = await response.text();
