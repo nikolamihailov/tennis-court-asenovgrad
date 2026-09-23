@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Loader2, MapPin, Sparkles } from "lucide-react";
 
@@ -71,6 +71,28 @@ export default function BookingBoard({
     createBookingAction,
     {},
   );
+
+  const summaryRef = useRef<HTMLElement>(null);
+
+  /**
+   * Bring the summary panel into view after a slot is picked.
+   *
+   * On phones the panel is the last thing in the page, below every court, so tapping a
+   * slot looks like it did nothing — the form is several screens down. On large screens
+   * the panel is `lg:sticky` and already beside the list, so scrolling there would be
+   * jarring rather than helpful, hence the width check.
+   */
+  useEffect(() => {
+    if (!selection) return;
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+
+    summaryRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "start",
+    });
+  }, [selection]);
 
   function updateQuery(next: { date?: string; courtId?: string | null }) {
     const params = new URLSearchParams(searchParams.toString());
@@ -211,7 +233,8 @@ export default function BookingBoard({
         </div>
       </div>
 
-      <aside className="lg:sticky lg:top-24 lg:self-start">
+      {/* scroll-mt keeps the heading clear of the sticky navbar when scrolled into view */}
+      <aside ref={summaryRef} className="scroll-mt-24 lg:sticky lg:top-24 lg:self-start">
         <div className="rounded-2xl border border-white/10 bg-navy-800 p-6">
           <h2 className="font-semibold">Детайли за резервацията</h2>
 
