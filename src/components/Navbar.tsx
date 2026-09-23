@@ -40,14 +40,18 @@ export default async function Navbar() {
         </ul>
 
         <div className="flex items-center gap-3">
+          {/* These stay visible on phones — hiding them left mobile users with no way to
+              sign in, reach their bookings, or open the admin panel. Only the labels
+              collapse on narrow screens; the icons carry the meaning. */}
           {user?.role === "ADMIN" && (
             <Link
               href="/admin"
-              className="hidden items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white/80 transition-colors hover:text-white sm:inline-flex"
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-2 text-sm font-medium text-white/80 transition-colors hover:text-white sm:px-4"
               title="Администрация"
+              aria-label="Администрация"
             >
               <LayoutDashboard size={15} />
-              Админ
+              <span className="hidden sm:inline">Админ</span>
             </Link>
           )}
 
@@ -55,10 +59,14 @@ export default async function Navbar() {
             <>
               <Link
                 href="/my-bookings"
-                className="hidden items-center gap-2 text-sm text-white/80 transition-colors hover:text-white sm:inline-flex"
+                className="inline-flex items-center gap-2 text-sm text-white/80 transition-colors hover:text-white"
+                title="Моите резервации"
+                aria-label="Моите резервации"
               >
                 <User size={15} />
-                {user.firstName || user.email}
+                <span className="hidden max-w-[10ch] truncate sm:inline">
+                  {user.firstName || user.email}
+                </span>
               </Link>
               <form
                 action={async () => {
@@ -79,7 +87,7 @@ export default async function Navbar() {
           ) : (
             <Link
               href="/login"
-              className="hidden text-sm text-white/80 transition-colors hover:text-white sm:inline"
+              className="text-sm text-white/80 transition-colors hover:text-white"
             >
               Вход
             </Link>
