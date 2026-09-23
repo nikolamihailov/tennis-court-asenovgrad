@@ -2,22 +2,14 @@ import { config as loadEnv } from "dotenv";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../src/generated/prisma/client";
+import { requireMigrationUrl } from "./database-url";
 
 loadEnv({ path: ".env.local", quiet: true });
 loadEnv({ quiet: true });
 
-// Same precedence as prisma7.config.ts: an explicit DIRECT_URL, then the unpooled URL
-// Neon's Vercel integration injects, then the pooled one as a last resort.
-const connectionString =
-  process.env.DIRECT_URL ??
-  process.env.DATABASE_URL_UNPOOLED ??
-  process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error(
-    "No database URL found. Set DIRECT_URL, DATABASE_URL_UNPOOLED or DATABASE_URL.",
-  );
-}
+// Same resolution as prisma7.config.ts, so seeding and migrating always agree on which
+// endpoint they talk to.
+const connectionString = requireMigrationUrl();
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
