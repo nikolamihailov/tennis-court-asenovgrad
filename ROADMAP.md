@@ -179,9 +179,9 @@ Not bugs — decisions to keep 0.1.0 shippable:
 | `AUTH_SECRET` | yes | `npx auth secret`, or `openssl rand -base64 32`. |
 | `AUTH_URL` | prod only | e.g. `https://your-domain.com`. Vercel usually infers this. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | yes | Google Cloud Console → OAuth client. |
-| `SENDGRID_API_KEY` | no | Without it, emails are logged to the console instead of sent. |
-| `SENDGRID_FROM_EMAIL` | no | Must be the address verified under Single Sender Verification. |
-| `SENDGRID_FROM_NAME` | no | Display name. Defaults to `Тенис клуб Асеновград`. |
+| `BREVO_API_KEY` | no | Without it, emails are logged to the console instead of sent. |
+| `BREVO_FROM_EMAIL` | no | Must be an address verified in Brevo under Senders. |
+| `MAIL_FROM_NAME` | no | Display name. Defaults to `Тенис клуб Асеновград`. |
 | `SEED_ADMIN_EMAIL` | no | Seeding with this set creates/promotes that account to `ADMIN`. |
 
 #### Google OAuth redirect URIs
