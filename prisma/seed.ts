@@ -6,10 +6,17 @@ import { PrismaClient } from "../src/generated/prisma/client";
 loadEnv({ path: ".env.local", quiet: true });
 loadEnv({ quiet: true });
 
-const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+// Same precedence as prisma7.config.ts: an explicit DIRECT_URL, then the unpooled URL
+// Neon's Vercel integration injects, then the pooled one as a last resort.
+const connectionString =
+  process.env.DIRECT_URL ??
+  process.env.DATABASE_URL_UNPOOLED ??
+  process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("Neither DIRECT_URL nor DATABASE_URL is set.");
+  throw new Error(
+    "No database URL found. Set DIRECT_URL, DATABASE_URL_UNPOOLED or DATABASE_URL.",
+  );
 }
 
 const prisma = new PrismaClient({

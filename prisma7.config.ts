@@ -26,6 +26,13 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    // DATABASE_URL_UNPOOLED is what Neon's Vercel integration injects for the direct
+    // connection, so it is picked up automatically and DIRECT_URL only has to be set
+    // by hand on other hosts. DATABASE_URL is the last resort: it works for a plain
+    // local Postgres, which has no pooler to be defeated by.
+    url:
+      process.env["DIRECT_URL"] ??
+      process.env["DATABASE_URL_UNPOOLED"] ??
+      process.env["DATABASE_URL"],
   },
 });
