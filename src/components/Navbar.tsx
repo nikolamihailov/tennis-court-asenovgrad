@@ -25,7 +25,7 @@ export default async function Navbar() {
           aria-label="Тенис клуб Асеновград — начало"
         >
           <Image
-            src="/images/ball.png"
+            src="/images/logo.png"
             alt=""
             width={128}
             height={128}
