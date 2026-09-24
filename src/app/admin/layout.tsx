@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { BarChart3, CalendarRange, LayoutGrid, LogOut, Users } from "lucide-react";
 
+import logo from "@/assets/logo.png";
 import { signOut } from "@/auth";
 import { requireAdmin } from "@/lib/dal";
 
@@ -34,15 +35,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       <header className="border-b border-white/5 bg-navy-900">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
           <div className="flex items-center gap-8">
-            <Link href="/admin" className="flex items-center gap-2.5">
-              <Image
-                src="/images/logo.png"
-                alt=""
-                width={128}
-                height={128}
-                className="h-9 w-9 shrink-0"
-              />
-              <span className="text-sm font-semibold">Администрация</span>
+            <Link href="/admin" aria-label="Администрация — табло">
+              <Image src={logo} alt="" className="h-10 w-10 shrink-0" />
             </Link>
 
             <nav className="hidden items-center gap-1 md:flex">
