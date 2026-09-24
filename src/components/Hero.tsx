@@ -17,11 +17,14 @@ export default function Hero() {
           className="object-cover object-center"
         />
       </div>
-      <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/70 to-transparent" />
+      {/* A left-to-right fade only works when the text sits in the left half. On phones
+          the content spans the full width, so the fade left the right-hand side of every
+          line over bare photo. Below md it becomes a flat scrim instead. */}
+      <div className="absolute inset-0 bg-navy-950/75 md:bg-transparent md:bg-linear-to-r md:from-navy-950 md:via-navy-950/70 md:to-transparent" />
 
       <div className="relative mx-auto max-w-7xl px-6 py-24 md:py-32">
-        <div className="max-w-xl">
-          <div className="mb-5 flex items-center gap-2 text-sm text-brand-400">
+        <div className="mx-auto max-w-xl text-center md:mx-0 md:text-left">
+          <div className="mb-5 flex items-center justify-center gap-2 text-sm text-brand-400 md:justify-start">
             <MapPin size={16} />
             Асеновград, България
           </div>
@@ -77,7 +80,9 @@ function InfoItem({
   subtitle: string;
 }) {
   return (
-    <div className="flex items-start gap-3">
+    // Centred as a block on phones — with three of these stacked, centring the text but
+    // leaving the icons flush left reads as a ragged column rather than a centred one.
+    <div className="flex items-start justify-center gap-3 text-center sm:justify-start sm:text-left">
       <span className="mt-0.5 text-brand-400">{icon}</span>
       <div>
         <p className="text-sm font-semibold text-white">{title}</p>

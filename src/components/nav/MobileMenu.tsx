@@ -174,7 +174,7 @@ export default function MobileMenu({
                   </MenuAction>
                 )}
 
-                <Link
+               <Link
                   href="/booking"
                   onClick={close}
                   className="flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-semibold text-navy-950 transition-colors hover:bg-brand-400"
