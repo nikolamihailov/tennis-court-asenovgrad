@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { CalendarDays, LayoutDashboard, LogOut, User } from "lucide-react";
 
@@ -18,11 +19,23 @@ export default async function Navbar() {
   return (
     <header className="sticky top-0 z-50 bg-navy-900/95 backdrop-blur border-b border-white/5">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-navy-950 font-bold">
-            TA
-          </span>
-          <span className="text-sm font-semibold leading-tight">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5"
+          aria-label="Тенис клуб Асеновград — начало"
+        >
+          <Image
+            src="/images/ball.png"
+            alt=""
+            width={128}
+            height={128}
+            priority
+            className="h-9 w-9 shrink-0"
+          />
+          {/* Hidden on phones: the Hero repeats the club name as an h1 immediately
+              below, so the header loses nothing and the booking CTA gains room. The
+              link's aria-label carries the name for screen readers either way. */}
+          <span className="hidden text-sm font-semibold leading-tight sm:block">
             Тенис клуб
             <br />
             Асеновград
