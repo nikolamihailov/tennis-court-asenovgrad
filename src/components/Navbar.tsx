@@ -5,8 +5,9 @@ import { CalendarDays, LayoutDashboard, LogOut, User } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { signOut } from "@/auth";
 import { getCurrentUser } from "@/lib/dal";
+import MobileMenu, { type NavLink } from "@/components/nav/MobileMenu";
 
-const links = [
+const links: NavLink[] = [
   { href: "/#home", label: "Начало" },
   { href: "/#about", label: "За клуба" },
   { href: "/#courts", label: "Кортове" },
@@ -17,88 +18,101 @@ const links = [
 export default async function Navbar() {
   const user = await getCurrentUser();
 
+  // Defined here rather than inside MobileMenu so the client component never imports
+  // the auth module — it receives this as a prop and only knows how to submit it.
+  async function signOutAction() {
+    "use server";
+    await signOut({ redirectTo: "/" });
+  }
+
   return (
-    <header className="sticky top-0 z-50 bg-navy-900/95 backdrop-blur border-b border-white/5">
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        {/* Ball only — the Hero carries the club name as an h1 immediately below, so
-            repeating it here just crowded the header. aria-label gives the link an
-            accessible name now that there is no visible text. */}
-        <Link href="/" aria-label="Тенис клуб Асеновград — начало">
-          <Image src={logo} alt="" priority className="h-10 w-10 shrink-0" />
-        </Link>
+    <header className="sticky top-0 z-50 border-b border-white/5 bg-navy-900/95 backdrop-blur">
+      <nav className="relative mx-auto flex h-(--header-h) max-w-7xl items-center justify-between gap-4 px-6">
+        {/* Logo and section links share a left group, matching the admin header. */}
+        <div className="flex items-center gap-8">
+          <Link href="/" aria-label="Тенис клуб Асеновград — начало">
+            <Image src={logo} alt="" priority className="h-10 w-10 shrink-0" />
+          </Link>
 
-        <ul className="hidden items-center gap-8 text-sm text-white/80 md:flex">
-          {links.map((link) => (
-            <li key={link.href}>
-              <Link href={link.href} className="hover:text-white transition-colors">
-                {link.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+          <ul className="hidden items-center gap-6 text-sm text-white/80 lg:flex">
+            {links.map((link) => (
+              <li key={link.href}>
+                <Link href={link.href} className="transition-colors hover:text-white">
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        <div className="flex items-center gap-3">
-          {/* These stay visible on phones — hiding them left mobile users with no way to
-              sign in, reach their bookings, or open the admin panel. Only the labels
-              collapse on narrow screens; the icons carry the meaning. */}
-          {user?.role === "ADMIN" && (
-            <Link
-              href="/admin"
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-2 text-sm font-medium text-white/80 transition-colors hover:text-white sm:px-4"
-              title="Администрация"
-              aria-label="Администрация"
-            >
-              <LayoutDashboard size={15} />
-              <span className="hidden sm:inline">Админ</span>
-            </Link>
-          )}
-
-          {user ? (
-            <>
-              <Link
-                href="/my-bookings"
-                className="inline-flex items-center gap-2 text-sm text-white/80 transition-colors hover:text-white"
-                title="Моите резервации"
-                aria-label="Моите резервации"
-              >
-                <User size={15} />
-                <span className="hidden max-w-[10ch] truncate sm:inline">
-                  {user.firstName || user.email}
-                </span>
-              </Link>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/" });
-                }}
-              >
-                <button
-                  type="submit"
-                  title="Изход"
-                  aria-label="Изход"
-                  className="flex items-center rounded-full border border-white/15 p-2 text-white/60 transition-colors hover:text-white"
-                >
-                  <LogOut size={15} />
-                </button>
-              </form>
-            </>
-          ) : (
-            <Link
-              href="/login"
-              className="text-sm text-white/80 transition-colors hover:text-white"
-            >
-              Вход
-            </Link>
-          )}
-
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* The primary action stays one tap away on phones rather than moving into
+              the menu; its label shortens instead. */}
           <Link
             href="/booking"
-            className="inline-flex items-center gap-2 rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-navy-950 transition-colors hover:bg-brand-400"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-navy-950 transition-colors hover:bg-brand-400 sm:px-5"
           >
             <CalendarDays size={16} strokeWidth={2.5} />
             <span className="hidden sm:inline">Резервирай корт</span>
             <span className="sm:hidden">Резервирай</span>
           </Link>
+          {/* Account controls are icon-only: the signed-in name added width without
+              telling anyone anything they did not already know, and truncated to
+              "Администра…" on narrower screens. title/aria-label carry the meaning. */}
+          <div className="hidden items-center gap-2 lg:flex">
+            {user?.role === "ADMIN" && (
+              <Link
+                href="/admin"
+                title="Администрация"
+                aria-label="Администрация"
+                className="flex items-center rounded-lg border border-white/15 p-2.5 text-white/80 transition-colors hover:text-white"
+              >
+                <LayoutDashboard size={16} />
+              </Link>
+            )}
+
+            {user ? (
+              <>
+                <Link
+                  href="/my-bookings"
+                  title={`Моите резервации (${user.firstName || user.email})`}
+                  aria-label="Моите резервации"
+                  className="flex items-center rounded-lg border border-white/15 p-2.5 text-white/80 transition-colors hover:text-white"
+                >
+                  <User size={16} />
+                </Link>
+
+                <form action={signOutAction}>
+                  <button
+                    type="submit"
+                    title="Изход"
+                    aria-label="Изход"
+                    className="flex items-center rounded-lg border border-white/15 p-2.5 text-white/60 transition-colors hover:text-white"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                </form>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                className="rounded-lg border border-white/15 px-4 py-2.5 text-sm font-medium text-white/80 transition-colors hover:text-white"
+              >
+                Вход
+              </Link>
+            )}
+          </div>
+
+          <MobileMenu
+            links={links}
+            user={
+              user && {
+                label: user.firstName || user.email || "профил",
+                isAdmin: user.role === "ADMIN",
+              }
+            }
+            signOutAction={signOutAction}
+          />
         </div>
       </nav>
     </header>
