@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
 :root {
+  /* Header height. Defined globally rather than on the header because the mobile menu's
+     backdrop renders in a portal on <body>, outside the header's subtree. */
+  --header-h: 4.5rem;
+
   --color-navy-950: #0a121f;
   --color-navy-900: #0e1a2b;
   --color-navy-800: #142338;
