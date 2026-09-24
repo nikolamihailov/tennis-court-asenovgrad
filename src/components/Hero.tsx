@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { getImageProps } from "next/image";
 import { ArrowRight, MapPin, Phone, Clock, LayoutGrid } from "lucide-react";
 
 /**
@@ -17,28 +17,60 @@ import { ArrowRight, MapPin, Phone, Clock, LayoutGrid } from "lucide-react";
  *   the CTA land in the thumb's half of the screen.
  */
 export default function Hero() {
+  // Art direction rather than one image panned with object-position. The landscape shot
+  // cannot serve a tall screen: any portrait crop of it puts the player mid-frame, right
+  // behind the heading. The mobile file is its own crop — tight and high, so his raised
+  // arm and torso sit in the band above the copy and his legs fall into the gradient.
+  //
+  // <picture> with getImageProps, per the Next.js art-direction guidance: the browser
+  // downloads only the source that matches, unlike two <Image>s toggled with CSS, where
+  // both are fetched and one is then hidden.
+  const common = {
+    alt: "Тенис корт с играч по време на сервис",
+    sizes: "100vw",
+    quality: 80,
+    priority: true,
+  };
+
+  const {
+    props: { srcSet: desktopSrcSet },
+  } = getImageProps({
+    ...common,
+    src: "/images/tennis-hero.jpg",
+    width: 1800,
+    height: 1200,
+  });
+
+  const {
+    props: { srcSet: mobileSrcSet, ...imgProps },
+  } = getImageProps({
+    ...common,
+    src: "/images/tennis-hero-mobile.jpg",
+    width: 780,
+    height: 1560,
+  });
+
   return (
     <section
       id="home"
       className="relative isolate flex min-h-[calc(100svh-var(--header-h))] items-end overflow-hidden bg-navy-900 md:block md:min-h-0"
     >
-      <div className="absolute inset-0 -z-10">
-        <Image
-          src="/images/tennis-hero.jpg"
-          alt="Тенис корт с играч по време на сервис"
-          fill
-          priority
-          sizes="100vw"
-          // A portrait crop of this landscape shot cannot hold both the player and the
-          // copy: centred, he lands directly behind the heading and his white shirt
-          // fights the text. Panning right instead frames the clay, the court lines and
-          // the racket's shadow — texture the heading can sit on cleanly. Desktop keeps
-          // the player, since the copy there occupies only the left third.
-          className="object-cover object-[80%_center] md:object-center"
+      <picture>
+        <source media="(min-width: 768px)" srcSet={desktopSrcSet} />
+        <source srcSet={mobileSrcSet} />
+        {/* alt is repeated after the spread: it is already inside imgProps, but the
+            a11y lint rule cannot see through a spread and the explicit prop is clearer. */}
+        <img
+          {...imgProps}
+          alt={common.alt}
+          className="absolute inset-0 -z-10 size-full object-cover"
         />
-      </div>
+      </picture>
 
-      <div className="absolute inset-0 -z-10 bg-linear-to-b from-navy-950/20 via-navy-950/65 to-navy-950 md:hidden" />
+      {/* The ramp is deliberately front-loaded: the copy begins around 40% down, right
+          where the player's white shirt is, so the fade has to be most of the way to
+          solid by then. The top stays light enough to keep his arm and the racket. */}
+      <div className="absolute inset-0 -z-10 bg-linear-to-b from-navy-950/10 via-navy-950/85 via-45% to-navy-950 md:hidden" />
       <div className="absolute inset-0 -z-10 hidden md:block md:bg-linear-to-r md:from-navy-950 md:via-navy-950/70 md:to-transparent" />
 
       <div className="relative mx-auto w-full max-w-7xl px-6 pb-14 pt-24 md:py-32">
