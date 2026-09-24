@@ -36,7 +36,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           <div className="flex items-center gap-8">
             <Link href="/admin" className="flex items-center gap-2.5">
               <Image
-                src="/images/ball.png"
+                src="/images/logo.png"
                 alt=""
                 width={128}
                 height={128}
