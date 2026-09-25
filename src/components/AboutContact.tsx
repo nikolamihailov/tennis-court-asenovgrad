@@ -1,4 +1,4 @@
-import { MapPin, Phone, Clock, ArrowRight } from "lucide-react";
+import { MapPin, Phone, Clock } from "lucide-react";
 
 export default function AboutContact() {
   return (
@@ -26,13 +26,6 @@ export default function AboutContact() {
             професионални играчи. Нашата цел е да създадем среда за
             развитие, спорт и приятелства около тениса.
           </p>
-          <a
-            href="#about"
-            className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-sm hover:border-white/30"
-          >
-            Научи повече
-            <ArrowRight size={14} />
-          </a>
         </div>
 
         <div id="contact">

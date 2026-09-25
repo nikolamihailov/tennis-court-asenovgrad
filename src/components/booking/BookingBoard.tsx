@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Loader2, MapPin, Sparkles } from "lucide-react";
 
@@ -52,6 +52,7 @@ export default function BookingBoard({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [isRefreshing, startTransition] = useTransition();
   const [racketCount, setRacketCount] = useState(0);
   const [lighting, setLighting] = useState(false);
 
@@ -103,7 +104,14 @@ export default function BookingBoard({
 
     // Changing the day invalidates a slot chosen on the previous day.
     setSelection(null);
-    router.push(`/booking?${params.toString()}`);
+
+    // Wrapped in a transition so `isRefreshing` can dim the stale slots while the server
+    // fetches the new day. loading.tsx does not cover this: it only replaces a segment
+    // being mounted, and this is the same route with different search params, so without
+    // a pending state the old availability would sit there looking current.
+    startTransition(() => {
+      router.push(`/booking?${params.toString()}`);
+    });
   }
 
   return (
@@ -122,6 +130,13 @@ export default function BookingBoard({
               className="bg-transparent text-sm text-white outline-none scheme-dark"
             />
           </label>
+
+          {isRefreshing && (
+            <span className="flex items-center gap-2 text-xs text-white/50">
+              <Loader2 size={14} className="animate-spin" />
+              Зареждане…
+            </span>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <FilterChip
@@ -148,7 +163,14 @@ export default function BookingBoard({
           </p>
         )}
 
-        <div className="mt-6 space-y-6">
+        {/* Dimmed and inert while the new day loads, so the slots on screen are never
+            mistaken for the ones being asked for. aria-busy tells screen readers. */}
+        <div
+          aria-busy={isRefreshing}
+          className={`mt-6 space-y-6 transition-opacity ${
+            isRefreshing ? "pointer-events-none opacity-50" : ""
+          }`}
+        >
           {availability.map(({ court, slots }) => {
             const freeCount = slots.filter((slot) => slot.available).length;
 
