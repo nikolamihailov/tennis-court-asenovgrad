@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { type Profile } from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -104,7 +104,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, account, profile, trigger }) {
       // `user` is only present on initial sign-in.
       if (user?.id) token.sub = user.id;
       if (!token.sub) return token;
@@ -117,16 +117,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isStale = Date.now() - lastSyncedAt > ROLE_REFRESH_MS;
 
       if (user || trigger === "update" || isStale) {
-        const dbUser = await db.user.findUnique({
-          where: { id: token.sub },
-          select: {
-            role: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            image: true,
-          },
-        });
+        const select = {
+          role: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          image: true,
+        } as const;
+
+        // The Google sync has to happen here, not in `events.signIn`: Auth.js runs this
+        // callback *before* that event, so a token built from the row and then synced
+        // afterwards carried no name or picture — the navbar showed email initials for
+        // the next five minutes while the profile page, reading the row, looked right.
+        const dbUser =
+          user && account?.provider === "google" && profile
+            ? await db.user.update({
+                where: { id: token.sub },
+                data: googleProfileData(profile, user.name),
+                select,
+              })
+            : await db.user.findUnique({ where: { id: token.sub }, select });
 
         // A token for a user row that no longer exists keeps its old claims otherwise.
         // Dropping to USER means a deleted account cannot retain admin access.
@@ -134,8 +144,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.firstName = dbUser?.firstName ?? null;
         token.lastName = dbUser?.lastName ?? null;
         token.phone = dbUser?.phone ?? null;
-        // Refreshed on the same timer as the rest, so a picture that first appeared
-        // during the signIn event reaches the navbar without a full re-login.
+        // Refreshed on the same timer as the rest, so a picture changed on Google reaches
+        // the navbar without a full re-login.
         token.picture = dbUser?.image ?? null;
         token.syncedAt = Date.now();
       }
@@ -157,52 +167,46 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 
-  events: {
-    /**
-     * Keep a Google-backed row in step with the Google profile, on every sign-in.
-     *
-     * Google owns the name for these accounts — the profile page shows it read-only and
-     * refuses to edit it — so it has to be re-read rather than filled in once. Doing this
-     * only when the fields were empty left stale values in place: the seeded admin row
-     * carried the literal name "Администратор" and kept it forever, because there was
-     * nothing missing to fill.
-     *
-     * `given_name` and `family_name` come straight from the OAuth profile, which splits
-     * the name properly instead of guessing at the first space — that guess mangles
-     * double-barrelled surnames and names written family-name-first.
-     */
-    async signIn({ user, account, profile }) {
-      if (!user.id || account?.provider !== "google" || !profile) return;
-
-      const given = typeof profile.given_name === "string" ? profile.given_name : null;
-      const family = typeof profile.family_name === "string" ? profile.family_name : null;
-
-      // Fall back to splitting the display name only when Google omits the parts.
-      const [fallbackFirst, ...fallbackRest] = (profile.name ?? user.name ?? "")
-        .trim()
-        .split(/\s+/);
-
-      const firstName = given || fallbackFirst || null;
-      const lastName = family || (fallbackRest.length > 0 ? fallbackRest.join(" ") : null);
-
-      // The adapter sets `image` when it creates a row, but rows that predate the first
-      // Google sign-in — a guest who booked, or the seeded admin — never had one. Syncing
-      // it here covers those, and keeps the picture current when someone changes it.
-      const picture = typeof profile.picture === "string" ? profile.picture : null;
-
-      await db.user.update({
-        where: { id: user.id },
-        data: {
-          isGuest: false,
-          firstName,
-          lastName,
-          name:
-            (typeof profile.name === "string" ? profile.name : null) ??
-            [firstName, lastName].filter(Boolean).join(" ") ??
-            undefined,
-          ...(picture ? { image: picture } : {}),
-        },
-      });
-    },
-  },
 });
+
+/**
+ * The columns a Google-backed row takes from the Google profile, on every sign-in.
+ *
+ * Google owns the name for these accounts — the profile page shows it read-only and
+ * refuses to edit it — so it has to be re-read rather than filled in once. Doing this
+ * only when the fields were empty left stale values in place: the seeded admin row
+ * carried the literal name "Администратор" and kept it forever, because there was
+ * nothing missing to fill.
+ *
+ * `given_name` and `family_name` come straight from the OAuth profile, which splits the
+ * name properly instead of guessing at the first space — that guess mangles
+ * double-barrelled surnames and names written family-name-first.
+ */
+function googleProfileData(profile: Profile, fallbackName: string | null | undefined) {
+  const given = typeof profile.given_name === "string" ? profile.given_name : null;
+  const family = typeof profile.family_name === "string" ? profile.family_name : null;
+
+  // Fall back to splitting the display name only when Google omits the parts.
+  const [fallbackFirst, ...fallbackRest] = (profile.name ?? fallbackName ?? "")
+    .trim()
+    .split(/\s+/);
+
+  const firstName = given || fallbackFirst || null;
+  const lastName = family || (fallbackRest.length > 0 ? fallbackRest.join(" ") : null);
+
+  // The adapter sets `image` when it creates a row, but rows that predate the first
+  // Google sign-in — a guest who booked, or the seeded admin — never had one. Syncing it
+  // here covers those, and keeps the picture current when someone changes it.
+  const picture = typeof profile.picture === "string" ? profile.picture : null;
+
+  return {
+    isGuest: false,
+    firstName,
+    lastName,
+    name:
+      (typeof profile.name === "string" ? profile.name : null) ??
+      [firstName, lastName].filter(Boolean).join(" ") ??
+      undefined,
+    ...(picture ? { image: picture } : {}),
+  };
+}
