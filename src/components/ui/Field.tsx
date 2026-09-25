@@ -60,7 +60,9 @@ export function TextField({
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={[hintId, errorId].filter(Boolean).join(" ") || undefined}
-        className="mt-1.5 w-full rounded-lg border border-white/10 bg-navy-900 px-3.5 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-brand-500 disabled:opacity-50"
+        // read-only is styled apart from disabled: a field you are merely viewing should
+        // stay legible, while one you may never edit is dimmed.
+        className="mt-1.5 w-full rounded-lg border border-white/10 bg-navy-900 px-3.5 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/25 read-only:border-transparent read-only:bg-navy-900/60 read-only:text-white/70 focus:border-brand-500 disabled:opacity-50"
         {...rest}
       />
 
