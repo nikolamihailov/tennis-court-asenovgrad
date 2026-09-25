@@ -202,10 +202,10 @@ Neon is Vercel's own Postgres offering, so it needs no separate account:
 2. Vercel injects `DATABASE_URL` (and related vars) into all environments automatically.
 3. Add `DIRECT_URL` manually — copy the **unpooled** string from the Neon dashboard.
 4. Add the remaining variables from the table above.
-5. Apply migrations yourself — the build does **not** do it:
+5. Add `DIRECT_URL` as a GitHub Actions repository secret as well. Pushes to `main` then
+   apply migrations through `.github/workflows/migrate.yml`. Seed once by hand:
    ```powershell
    $env:DIRECT_URL="<neon direct/unpooled url>"
-   npm run db:deploy
    npm run db:seed      # first time only, with SEED_ADMIN_EMAIL set
    ```
 
@@ -213,7 +213,7 @@ Neon is Vercel's own Postgres offering, so it needs no separate account:
 unpooled connection under whatever name the Neon integration injected, and falls back to
 rewriting the `-pooler` host out of a pooled URL.
 
-#### Why migrations are not part of the build
+#### How migrations reach production
 
 `prisma migrate deploy` was originally in the `build` script. It was taken out because:
 
@@ -222,11 +222,15 @@ rewriting the `-pooler` host out of a pooled URL.
 - Concurrent builds — a production deploy and a preview, say — both run it against the
   same database and race for Prisma's migration advisory lock. The loser dies with
   `P1002: Timed out trying to acquire a postgres advisory lock` after 10s.
-- A schema change is worth doing deliberately, not as a side effect of `git push`.
 
-The trade-off is that deploying a migration is now two steps, and forgetting the first one
-shows up as a runtime error rather than a failed build. The alternative —
-`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` — is not used: that lock is what stops two
+That made deploying a migration a manual second step, and forgetting it showed up as a
+runtime error rather than a failed build. The automation is back as a GitHub Actions
+workflow (`.github/workflows/migrate.yml`) that runs `migrate deploy` on pushes to `main`
+only, in a concurrency group that queues runs rather than overlapping them, so the lock
+race cannot recur and the build still needs no database. Requiring the `migrate` check in
+Vercel's Deployment Checks makes production wait for it.
+
+`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` is still not used: that lock is what stops two
 concurrent migrations from corrupting each other, and disabling it treats the symptom.
 
 For local development, `.env.local` can point at the same Neon branch or a local Postgres.
