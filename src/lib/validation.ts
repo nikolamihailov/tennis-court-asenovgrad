@@ -113,6 +113,47 @@ export const courtSchema = z.object({
     path: ["closingHour"],
   });
 
+/**
+ * Minimum 8 characters and nothing else.
+ *
+ * Composition rules (a digit, a symbol, mixed case) push people toward predictable
+ * substitutions like "Password1!" and toward writing passwords down, without adding much
+ * real entropy. Length is what matters. NIST dropped composition requirements for the
+ * same reason.
+ */
+const password = z
+  .string()
+  .min(8, { error: "Паролата трябва да е поне 8 символа." })
+  .max(200, { error: "Паролата е твърде дълга." });
+
+export const registerSchema = z
+  .object({
+    firstName: personName,
+    lastName: personName,
+    email,
+    phone,
+    password,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    error: "Паролите не съвпадат.",
+    path: ["confirmPassword"],
+  });
+
+export const loginSchema = z.object({
+  email,
+  // Not `password` here: an existing account may predate any rule we set, and telling
+  // someone their password is "too short" at sign-in leaks that it was accepted once.
+  password: z.string().min(1, { error: "Въведете парола." }),
+});
+
+/** Editable profile fields. Email is identity and role is staff-only, so neither is here. */
+export const profileSchema = z.object({
+  firstName: personName,
+  lastName: personName,
+  phone,
+});
+
 export const cancelBookingSchema = z.object({
   bookingId: z.string().trim().min(1),
   reason: optionalText(300),

@@ -8,6 +8,12 @@ import {
   updateCourtAction,
   type AdminFormState,
 } from "@/server/actions/admin";
+import {
+  FormMessage,
+  RequiredLegend,
+  SelectField,
+  TextField,
+} from "@/components/ui/Field";
 import type { CourtDTO } from "@/server/courts";
 
 /**
@@ -33,14 +39,15 @@ export default function CourtForm({
   // prefix both would emit id="name", and clicking either label would focus the first
   // one on the page.
   const idPrefix = useId();
+  const fieldId = (name: string) => `${idPrefix}${name}`;
 
   return (
     <form action={formAction} className="space-y-4">
       {court && <input type="hidden" name="id" value={court.id} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          idPrefix={idPrefix}
+        <TextField
+          id={fieldId("name")}
           name="name"
           label="Име"
           defaultValue={court?.name}
@@ -48,26 +55,20 @@ export default function CourtForm({
           error={state.errors?.name}
         />
 
-        <div>
-          <label
-            htmlFor={`${idPrefix}surface`}
-            className="block text-xs text-white/60"
-          >
-            Настилка
-          </label>
-          <select
-            id={`${idPrefix}surface`}
-            name="surface"
-            defaultValue={court?.surface ?? "CLAY"}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-navy-900 px-3 py-2 text-sm outline-none focus:border-brand-500"
-          >
-            <option value="CLAY">Глина</option>
-            <option value="HARD">Твърда настилка</option>
-          </select>
-        </div>
+        <SelectField
+          id={fieldId("surface")}
+          name="surface"
+          label="Настилка"
+          defaultValue={court?.surface ?? "CLAY"}
+          required
+          error={state.errors?.surface}
+        >
+          <option value="CLAY">Глина</option>
+          <option value="HARD">Твърда настилка</option>
+        </SelectField>
 
-        <Field
-          idPrefix={idPrefix}
+        <TextField
+          id={fieldId("pricePerHour")}
           name="pricePerHour"
           label="Цена на час (€)"
           type="number"
@@ -78,8 +79,8 @@ export default function CourtForm({
           error={state.errors?.pricePerHour}
         />
 
-        <Field
-          idPrefix={idPrefix}
+        <TextField
+          id={fieldId("sortOrder")}
           name="sortOrder"
           label="Подредба"
           type="number"
@@ -88,8 +89,8 @@ export default function CourtForm({
           error={state.errors?.sortOrder}
         />
 
-        <Field
-          idPrefix={idPrefix}
+        <TextField
+          id={fieldId("openingHour")}
           name="openingHour"
           label="Отваря в (час)"
           type="number"
@@ -100,8 +101,8 @@ export default function CourtForm({
           error={state.errors?.openingHour}
         />
 
-        <Field
-          idPrefix={idPrefix}
+        <TextField
+          id={fieldId("closingHour")}
           name="closingHour"
           label="Затваря в (час)"
           type="number"
@@ -113,16 +114,16 @@ export default function CourtForm({
         />
       </div>
 
-      <Field
-        idPrefix={idPrefix}
+      <TextField
+        id={fieldId("description")}
         name="description"
         label="Описание"
         defaultValue={court?.description ?? ""}
         error={state.errors?.description}
       />
 
-      <Field
-        idPrefix={idPrefix}
+      <TextField
+        id={fieldId("imageUrl")}
         name="imageUrl"
         label="Снимка (път или URL)"
         defaultValue={court?.imageUrl ?? "/images/court.jpg"}
@@ -130,8 +131,14 @@ export default function CourtForm({
       />
 
       <div className="flex flex-wrap gap-6">
-        <Checkbox name="isIndoor" label="Закрит корт" defaultChecked={court?.isIndoor} />
         <Checkbox
+          id={fieldId("isIndoor")}
+          name="isIndoor"
+          label="Закрит корт"
+          defaultChecked={court?.isIndoor}
+        />
+        <Checkbox
+          id={fieldId("isActive")}
           name="isActive"
           label="Активен (виден за клиенти)"
           defaultChecked={court?.isActive ?? true}
@@ -139,19 +146,10 @@ export default function CourtForm({
       </div>
 
       {state.message && (
-        <p
-          role="alert"
-          className={`rounded-lg px-3 py-2 text-sm ${
-            state.ok
-              ? "border border-brand-500/30 bg-brand-500/10 text-brand-300"
-              : "border border-red-500/30 bg-red-500/10 text-red-300"
-          }`}
-        >
-          {state.message}
-        </p>
+        <FormMessage tone={state.ok ? "success" : "error"}>{state.message}</FormMessage>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
           disabled={pending}
@@ -170,58 +168,28 @@ export default function CourtForm({
             Затвори
           </button>
         )}
+
+        <RequiredLegend className="ml-auto" />
       </div>
     </form>
   );
 }
 
-function Field({
-  name,
-  label,
-  error,
-  idPrefix = "",
-  ...rest
-}: {
-  name: string;
-  label: string;
-  error?: string;
-  idPrefix?: string;
-} & React.InputHTMLAttributes<HTMLInputElement>) {
-  const id = `${idPrefix}${name}`;
-
-  return (
-    <div>
-      <label htmlFor={id} className="block text-xs text-white/60">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={name}
-        aria-invalid={error ? true : undefined}
-        className="mt-1 w-full rounded-lg border border-white/10 bg-navy-900 px-3 py-2 text-sm outline-none placeholder:text-white/25 focus:border-brand-500"
-        {...rest}
-      />
-      {error && (
-        <p role="alert" className="mt-1 text-xs text-red-400">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function Checkbox({
+  id,
   name,
   label,
   defaultChecked,
 }: {
+  id: string;
   name: string;
   label: string;
   defaultChecked?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-white/80">
+    <label htmlFor={id} className="flex items-center gap-2 text-sm text-white/80">
       <input
+        id={id}
         type="checkbox"
         name={name}
         defaultChecked={defaultChecked}

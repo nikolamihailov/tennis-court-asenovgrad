@@ -64,9 +64,9 @@ export default async function Navbar() {
             {user ? (
               <>
                 <Link
-                  href="/my-bookings"
-                  title={`Моите резервации (${user.firstName || user.email})`}
-                  aria-label="Моите резервации"
+                  href="/profile"
+                  title={`Моят профил (${user.firstName || user.email})`}
+                  aria-label="Моят профил"
                   className="flex items-center rounded-lg border border-white/15 p-2.5 text-white/80 transition-colors hover:text-white"
                 >
                   <User size={16} />
