@@ -23,6 +23,8 @@ export type BookingDTO = {
   lighting: boolean;
   notes: string | null;
   bookedAsGuest: boolean;
+  /** True once the slot is over. Cancelling is refused past this point. */
+  hasEnded: boolean;
   cancelledAt: Date | null;
   cancellationReason: string | null;
   createdAt: Date;
@@ -53,10 +55,17 @@ const bookingInclude = {
 
 type BookingRow = {
   totalPrice: { toString(): string };
-} & Omit<BookingDTO, "totalPrice">;
+} & Omit<BookingDTO, "totalPrice" | "hasEnded">;
 
 function toBookingDTO(booking: BookingRow): BookingDTO {
-  return { ...booking, totalPrice: Number(booking.totalPrice.toString()) };
+  return {
+    ...booking,
+    totalPrice: Number(booking.totalPrice.toString()),
+    // Derived here rather than in the components that need it: reading the clock during
+    // render is a React purity violation, and this keeps the rule that decides whether
+    // cancelling is still possible next to the one enforcing it in cancelBooking().
+    hasEnded: booking.endsAt.getTime() <= Date.now(),
+  };
 }
 
 /**
@@ -326,12 +335,20 @@ export async function cancelBooking(
 ): Promise<BookingDTO> {
   const existing = await db.booking.findUnique({
     where: { id: bookingId },
-    select: { status: true },
+    select: { status: true, endsAt: true },
   });
 
   if (!existing) throw new BookingError("Резервацията не е намерена.");
   if (existing.status === "CANCELLED") {
     throw new BookingError("Резервацията вече е отказана.");
+  }
+
+  // Cancelling exists to free a court and warn the customer, and a finished slot can do
+  // neither — it would only rewrite history and fire a pointless email. The cut-off is
+  // the end of the slot rather than its start, so a no-show can still be cancelled while
+  // the hour is running.
+  if (existing.endsAt.getTime() <= Date.now()) {
+    throw new BookingError("Не може да откажете приключила резервация.");
   }
 
   const booking = await db.booking.update({

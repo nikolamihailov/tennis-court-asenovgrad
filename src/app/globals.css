@@ -26,6 +26,29 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/*
+ * Anchor links land under the sticky header without this: the browser scrolls the
+ * target's top edge to y=0, which the 72px header then covers, so you arrive at the
+ * section already past its heading. scroll-margin-top reserves that space, plus a little
+ * breathing room so the heading is not flush against the header.
+ *
+ * Applied to any element with an id rather than to the five sections that have one
+ * today, so a new anchor target cannot forget it.
+ */
+[id] {
+  scroll-margin-top: calc(var(--header-h) + 1rem);
+}
+
+/*
+ * Smooth scrolling for in-page links, off for anyone who has asked their system to
+ * reduce motion — animated scrolling is a common migraine and nausea trigger.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   background: var(--color-navy-950);
   color: #ffffff;

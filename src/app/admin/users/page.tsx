@@ -1,3 +1,4 @@
+import Badge from "@/components/admin/Badge";
 import { requireAdmin } from "@/lib/dal";
 import { formatClubDateShort } from "@/lib/time";
 import { listUsers } from "@/server/analytics";
@@ -41,7 +42,7 @@ export default async function AdminUsersPage({
         </p>
       ) : (
         <div className="mt-6 overflow-x-auto rounded-xl border border-white/5 bg-navy-800">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-180 text-sm">
             <thead>
               <tr className="border-b border-white/5 text-left text-xs uppercase tracking-wide text-white/40">
                 <th className="px-5 py-3 font-medium">Име</th>
@@ -63,17 +64,9 @@ export default async function AdminUsersPage({
                   <td className="px-5 py-3 text-white/55">{user.phone ?? "—"}</td>
                   <td className="px-5 py-3">
                     {user.role === "ADMIN" ? (
-                      <span className="rounded-full bg-brand-500/15 px-2.5 py-1 text-xs font-medium text-brand-400">
-                        админ
-                      </span>
-                    ) : user.isGuest ? (
-                      <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/60">
-                        гост
-                      </span>
+                      <Badge tone="brand">админ</Badge>
                     ) : (
-                      <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/60">
-                        регистриран
-                      </span>
+                      <Badge>{user.isGuest ? "гост" : "регистриран"}</Badge>
                     )}
                   </td>
                   <td className="px-5 py-3 text-right text-white/70">

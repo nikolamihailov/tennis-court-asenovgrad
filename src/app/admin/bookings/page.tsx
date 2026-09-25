@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import Badge from "@/components/admin/Badge";
 import CancelBookingButton from "@/components/admin/CancelBookingButton";
 import { requireAdmin } from "@/lib/dal";
 import { formatClubDateShort, formatClubTime, formatClubWeekday } from "@/lib/time";
@@ -123,11 +124,12 @@ export default async function AdminBookingsPage({
         </p>
       ) : (
         <div className="mt-6 overflow-x-auto rounded-xl border border-white/5 bg-navy-800">
-          <table className="w-full min-w-[840px] text-sm">
+          <table className="w-full min-w-230 text-sm">
             <thead>
               <tr className="border-b border-white/5 text-left text-xs uppercase tracking-wide text-white/40">
                 <th className="px-5 py-3 font-medium">Номер</th>
                 <th className="px-5 py-3 font-medium">Клиент</th>
+                <th className="px-5 py-3 font-medium">Тип</th>
                 <th className="px-5 py-3 font-medium">Корт</th>
                 <th className="px-5 py-3 font-medium">Кога</th>
                 <th className="px-5 py-3 text-right font-medium">Цена</th>
@@ -152,6 +154,12 @@ export default async function AdminBookingsPage({
                       <p className="text-xs text-white/35">{booking.user.phone}</p>
                     )}
                   </td>
+                  <td className="px-5 py-3">
+                    {/* How this booking was made, not what the account is today: someone
+                        who checked out as a guest and registered later still made this
+                        one as a guest. */}
+                    <Badge>{booking.bookedAsGuest ? "гост" : "регистриран"}</Badge>
+                  </td>
                   <td className="px-5 py-3 text-white/70">{booking.court.name}</td>
                   <td className="px-5 py-3">
                     <p>{formatClubDateShort(booking.startsAt)}</p>
@@ -165,21 +173,18 @@ export default async function AdminBookingsPage({
                     {formatEur(booking.totalPrice)}
                   </td>
                   <td className="px-5 py-3">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                        booking.status === "CANCELLED"
-                          ? "bg-red-500/15 text-red-300"
-                          : "bg-brand-500/15 text-brand-400"
-                      }`}
-                    >
-                      {booking.status === "CANCELLED" ? "Отказана" : "Потвърдена"}
-                    </span>
-                    {booking.bookedAsGuest && (
-                      <span className="ml-2 text-xs text-white/35">гост</span>
+                    {booking.status === "CANCELLED" ? (
+                      <Badge tone="danger">Отказана</Badge>
+                    ) : booking.hasEnded ? (
+                      <Badge>Приключила</Badge>
+                    ) : (
+                      <Badge tone="brand">Потвърдена</Badge>
                     )}
                   </td>
                   <td className="px-5 py-3 text-right">
-                    {booking.status === "CONFIRMED" && (
+                    {/* Finished slots have no cancel button: there is no court left to
+                        free, and the Server Action refuses them anyway. */}
+                    {booking.status === "CONFIRMED" && !booking.hasEnded && (
                       <CancelBookingButton
                         bookingId={booking.id}
                         reference={booking.reference}
