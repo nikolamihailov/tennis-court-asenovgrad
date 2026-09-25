@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import ProfileForm from "@/components/account/ProfileForm";
+import Avatar from "@/components/ui/Avatar";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/dal";
 import { formatEur } from "@/lib/pricing";
@@ -26,6 +27,7 @@ export default async function ProfilePage() {
         firstName: true,
         lastName: true,
         phone: true,
+        image: true,
         createdAt: true,
         accounts: { select: { provider: true } },
       },
@@ -45,10 +47,23 @@ export default async function ProfilePage() {
       </header>
 
       <section className="mt-8 rounded-2xl border border-white/10 bg-navy-800 p-6">
-        <h2 className="font-semibold">Лични данни</h2>
-        <p className="mt-1 text-sm text-white/50">
-          Използваме ги, за да те разпознаем при резервация.
-        </p>
+        <div className="flex items-center gap-4">
+          <Avatar
+            src={account.image}
+            firstName={account.firstName}
+            lastName={account.lastName}
+            email={account.email}
+            size={56}
+          />
+          <div>
+            <h2 className="font-semibold">Лични данни</h2>
+            <p className="mt-0.5 text-sm text-white/50">
+              {isGoogleAccount
+                ? "Снимката и имената идват от Google профила ти."
+                : "Използваме ги, за да те разпознаем при резервация."}
+            </p>
+          </div>
+        </div>
 
         <div className="mt-5">
           <ProfileForm

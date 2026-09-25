@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CalendarDays, LayoutDashboard, LogOut, User } from "lucide-react";
+import { CalendarDays, LayoutDashboard, LogOut } from "lucide-react";
 
 import logo from "@/assets/logo.png";
 import { signOut } from "@/auth";
 import { getCurrentUser } from "@/lib/dal";
 import MobileMenu, { type NavLink } from "@/components/nav/MobileMenu";
+import Avatar from "@/components/ui/Avatar";
 
 const links: NavLink[] = [
   { href: "/#home", label: "Начало" },
@@ -63,13 +64,21 @@ export default async function Navbar() {
 
             {user ? (
               <>
+                {/* The avatar replaces the generic person icon and needs no border of
+                    its own — it is already a circle with a ring. */}
                 <Link
                   href="/profile"
                   title={`Моят профил (${user.firstName || user.email})`}
                   aria-label="Моят профил"
-                  className="flex items-center rounded-lg border border-white/15 p-2.5 text-white/80 transition-colors hover:text-white"
+                  className="flex items-center rounded-full transition-opacity hover:opacity-80"
                 >
-                  <User size={16} />
+                  <Avatar
+                    src={user.image}
+                    firstName={user.firstName}
+                    lastName={user.lastName}
+                    email={user.email}
+                    size={38}
+                  />
                 </Link>
 
                 <form action={signOutAction}>
@@ -111,6 +120,10 @@ export default async function Navbar() {
               user && {
                 label: user.firstName || user.email || "профил",
                 isAdmin: user.role === "ADMIN",
+                image: user.image,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
               }
             }
             signOutAction={signOutAction}

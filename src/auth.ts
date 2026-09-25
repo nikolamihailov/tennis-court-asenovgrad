@@ -124,6 +124,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             firstName: true,
             lastName: true,
             phone: true,
+            image: true,
           },
         });
 
@@ -133,6 +134,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.firstName = dbUser?.firstName ?? null;
         token.lastName = dbUser?.lastName ?? null;
         token.phone = dbUser?.phone ?? null;
+        // Refreshed on the same timer as the rest, so a picture that first appeared
+        // during the signIn event reaches the navbar without a full re-login.
+        token.picture = dbUser?.image ?? null;
         token.syncedAt = Date.now();
       }
 
@@ -145,6 +149,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.firstName = (token.firstName as string | null) ?? null;
       session.user.lastName = (token.lastName as string | null) ?? null;
       session.user.phone = (token.phone as string | null) ?? null;
+      // Auth.js fills session.user.image from token.picture already, but only when the
+      // token had one at sign-in. Setting it explicitly keeps it in step with the
+      // refresh above, including when it goes from absent to present.
+      session.user.image = (token.picture as string | null) ?? null;
       return session;
     },
   },
@@ -177,6 +185,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const firstName = given || fallbackFirst || null;
       const lastName = family || (fallbackRest.length > 0 ? fallbackRest.join(" ") : null);
 
+      // The adapter sets `image` when it creates a row, but rows that predate the first
+      // Google sign-in — a guest who booked, or the seeded admin — never had one. Syncing
+      // it here covers those, and keeps the picture current when someone changes it.
+      const picture = typeof profile.picture === "string" ? profile.picture : null;
+
       await db.user.update({
         where: { id: user.id },
         data: {
@@ -187,6 +200,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             (typeof profile.name === "string" ? profile.name : null) ??
             [firstName, lastName].filter(Boolean).join(" ") ??
             undefined,
+          ...(picture ? { image: picture } : {}),
         },
       });
     },

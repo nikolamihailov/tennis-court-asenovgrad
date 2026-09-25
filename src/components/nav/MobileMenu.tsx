@@ -10,15 +10,20 @@ import {
   LogIn,
   LogOut,
   Menu,
-  User,
   X,
 } from "lucide-react";
+
+import Avatar from "@/components/ui/Avatar";
 
 export type NavLink = { href: string; label: string };
 
 export type MenuUser = {
   label: string;
   isAdmin: boolean;
+  image: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
 };
 
 /**
@@ -146,17 +151,26 @@ export default function MobileMenu({
                       </MenuAction>
                     )}
 
+                    {/* The avatar stands in for the person icon here too, so the menu
+                        shows who is signed in without a separate line of text. */}
                     <MenuAction
                       href="/profile"
-                      icon={<User size={16} />}
+                      icon={
+                        <Avatar
+                          src={user.image}
+                          firstName={user.firstName}
+                          lastName={user.lastName}
+                          email={user.email}
+                          size={26}
+                        />
+                      }
                       onClick={close}
                     >
-                      Моят профил
+                      <span>
+                        Моят профил
+                        <span className="block text-xs text-white/35">{user.label}</span>
+                      </span>
                     </MenuAction>
-
-                    <p className="px-1 pt-1 text-xs text-white/35">
-                      Влезли сте като {user.label}
-                    </p>
 
                     <form action={signOutAction}>
                       <button
