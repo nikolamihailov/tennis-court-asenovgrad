@@ -100,10 +100,24 @@ The app deploys to Vercel. Add a Neon database from the project's **Storage** ta
 injects `DATABASE_URL` automatically. Add `DIRECT_URL` (Neon's *unpooled* string) and the
 rest of the variables from `.env.example` yourself.
 
-### Migrations are not run by the build
+### Migrations run from GitHub Actions, not the build
 
-The build is `prisma generate && next build` and never touches the database. Apply
-migrations yourself, from a machine that can reach the database:
+The build is `prisma generate && next build` and never touches the database. Instead,
+[`.github/workflows/migrate.yml`](./.github/workflows/migrate.yml) runs `npm run db:deploy`
+on every push to `main`, alongside the Vercel build. It needs one repository secret,
+`DIRECT_URL` — Neon's **unpooled** connection string (GitHub → Settings → Secrets and
+variables → Actions).
+
+Why not in the build: running `migrate deploy` there coupled every deploy to database
+availability, and when two deploys built at once they raced for Prisma's migration
+advisory lock and one failed with `P1002`. The workflow runs only for `main`, and its
+concurrency group queues runs instead of overlapping them, so there is never more than one
+migration in flight.
+
+The workflow and the Vercel build start together, and the migration normally finishes
+first. To make that a guarantee, add the `migrate` check under Vercel → Settings →
+Deployment Checks, so a production deployment is only promoted after it passes. A failed
+run can be retried from the Actions tab (**Run workflow**), or by hand:
 
 ```bash
 # PowerShell
@@ -111,12 +125,6 @@ $env:DIRECT_URL="postgresql://...neon.tech/neondb?sslmode=require"
 npm run db:deploy
 ```
 
-This is deliberate. Running `migrate deploy` inside the build couples every deploy to
-database availability, so an unrelated hiccup blocks shipping app-only changes — and when
-two deploys build at once, they race for Prisma's migration advisory lock and one fails
-with `P1002`. Migrations are also a change you want to make on purpose, not as a side
-effect of pushing.
-
-Order matters when a release contains a migration: apply it **before** the new code is
-live if the change is additive, and see [ROADMAP.md](./ROADMAP.md#deploying-the-database)
-for the full checklist.
+Keep migrations additive (new nullable columns, new tables) so the running code keeps
+working while they apply. See [ROADMAP.md](./ROADMAP.md#deploying-the-database) for the
+full checklist.

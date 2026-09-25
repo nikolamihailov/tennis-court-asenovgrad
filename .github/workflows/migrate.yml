@@ -1,0 +1,55 @@
+# Applies pending Prisma migrations to the production database on every push to main.
+#
+# Migrations used to run inside the Vercel build, where concurrent builds (production and
+# previews) raced for Prisma's advisory lock and failed with P1002. Running them here
+# keeps the automation without the race:
+#
+# - only pushes to main migrate, so preview deploys never touch the schema
+# - the concurrency group queues runs instead of overlapping them, and never cancels one
+#   mid-migration
+# - the Vercel build stays database-free, so a database hiccup cannot block a deploy
+#
+# `migrate deploy` is a no-op when nothing is pending, so running on every push is cheap
+# and means a failed run heals itself on the next push (or via "Run workflow").
+#
+# Requires the repository secret DIRECT_URL: Neon's direct (unpooled) connection string.
+# See prisma/database-url.ts for why the pooler cannot be used.
+
+name: Migrate database
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: migrate-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply pending migrations
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "::error::The DIRECT_URL secret is not set. Add Neon's unpooled connection string under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          npm run db:deploy
