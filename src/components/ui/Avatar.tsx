@@ -6,6 +6,13 @@ import Image from "next/image";
  * Only Google accounts have a picture — someone who registered with email and password
  * never supplies one — so the fallback is the normal case rather than an edge case, and
  * is styled to look deliberate instead of like a missing image.
+ *
+ * The picture deliberately goes through next/image's optimiser rather than being marked
+ * `unoptimized`. Pointing the browser straight at lh3.googleusercontent.com looks
+ * cheaper, but Chrome blocks the response with ERR_BLOCKED_BY_ORB and the avatar renders
+ * as an empty circle — no referrerPolicy avoids it. Proxying through the optimiser serves
+ * the image from this origin, which sidesteps that entirely and happens to cut a 96px
+ * avatar from ~4 KB to ~1 KB. lh3.googleusercontent.com is allowed in next.config.ts.
  */
 export default function Avatar({
   src,
@@ -34,9 +41,6 @@ export default function Avatar({
         // Google returns a square image; object-cover guards against anything else.
         className={`shrink-0 rounded-full object-cover ring-1 ring-white/10 ${className}`}
         style={{ width: size, height: size }}
-        // Avatars are small and already optimised by Google. Routing them through the
-        // image optimiser would add a round trip for no saving.
-        unoptimized
       />
     );
   }
