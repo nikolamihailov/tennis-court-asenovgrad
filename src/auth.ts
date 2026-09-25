@@ -1,12 +1,23 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import bcrypt from "bcryptjs";
 
 import { db } from "@/lib/db";
+import { loginSchema } from "@/lib/validation";
 import type { Role } from "@/generated/prisma/enums";
 
 /** How long a role claim in the JWT may go unchecked against the database. */
 const ROLE_REFRESH_MS = 5 * 60 * 1000;
+
+/**
+ * A real bcrypt hash of a value nobody can supply, compared against when no account
+ * matches so that sign-in takes the same time whether or not the email exists. Without
+ * it, the timing difference alone reveals which addresses are registered.
+ */
+const DUMMY_PASSWORD_HASH =
+  "$2b$12$C6UzMDM.H6dfI/f/IKcEeO3ZPRy5BUQ2Q1kK2sQhEkFhKtLoVvLPy";
 
 declare module "next-auth" {
   interface Session {
@@ -50,6 +61,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // This is only safe because Google verifies email ownership before asserting it.
       // Do NOT copy this onto a provider that does not.
       allowDangerousEmailAccountLinking: true,
+    }),
+
+    Credentials({
+      name: "credentials",
+      credentials: {
+        email: { label: "Имейл", type: "email" },
+        password: { label: "Парола", type: "password" },
+      },
+
+      /**
+       * Returning null is the only way to reject, and Auth.js turns every null into the
+       * same generic error — which is what we want. Distinguishing "no such account" from
+       * "wrong password" would let anyone enumerate which emails are registered.
+       */
+      async authorize(credentials) {
+        const parsed = loginSchema.safeParse(credentials);
+        if (!parsed.success) return null;
+
+        const user = await db.user.findUnique({
+          where: { email: parsed.data.email },
+          select: { id: true, email: true, name: true, passwordHash: true },
+        });
+
+        // No hash means a guest row or a Google-only account. Still run a comparison
+        // against a dummy hash so the response takes the same time either way: returning
+        // early here would make a missing account measurably faster to probe than a wrong
+        // password.
+        const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
+        const ok = await bcrypt.compare(parsed.data.password, hash);
+
+        if (!ok || !user?.passwordHash) return null;
+
+        return { id: user.id, email: user.email, name: user.name };
+      },
     }),
   ],
 

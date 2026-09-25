@@ -51,6 +51,11 @@ model User {
   role      Role    @default(USER)
   isGuest   Boolean @default(false)
 
+  /// bcrypt hash, set only for accounts registered with email and password. Null for
+  /// guests and for people who only ever sign in with Google, so its presence is also
+  /// what tells the Credentials provider whether password sign-in is possible at all.
+  passwordHash String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

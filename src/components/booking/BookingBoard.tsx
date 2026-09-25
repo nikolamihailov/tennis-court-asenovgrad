@@ -12,6 +12,7 @@ import {
   MAX_RACKETS,
   RACKET_PRICE,
 } from "@/lib/pricing";
+import { RequiredLegend, TextField } from "@/components/ui/Field";
 import type { CourtAvailability } from "@/server/availability";
 
 const SURFACE_LABEL: Record<string, string> = {
@@ -350,10 +351,10 @@ export default function BookingBoard({
                       .join(" ") || currentUser.email}
                   </p>
                   {!currentUser.phone && (
-                    <Input
-                      className="mt-3"
+                    <TextField
+                      wrapperClassName="mt-3"
                       name="phone"
-                      label="Телефон (по избор)"
+                      label="Телефон"
                       type="tel"
                       placeholder="0888 123 456"
                       error={state.errors?.phone}
@@ -363,42 +364,45 @@ export default function BookingBoard({
               ) : (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <Input
+                    <TextField
                       name="firstName"
                       label="Име"
+                      autoComplete="given-name"
                       required
                       error={state.errors?.firstName}
                     />
-                    <Input
+                    <TextField
                       name="lastName"
                       label="Фамилия"
+                      autoComplete="family-name"
                       required
                       error={state.errors?.lastName}
                     />
                   </div>
-                  <Input
+                  <TextField
                     name="email"
                     label="Имейл"
                     type="email"
+                    autoComplete="email"
                     required
+                    hint="Изпращаме потвърждението тук."
                     error={state.errors?.email}
                   />
-                  <Input
+                  <TextField
                     name="phone"
-                    label="Телефон (по избор)"
+                    label="Телефон"
                     type="tel"
+                    autoComplete="tel"
                     placeholder="0888 123 456"
                     error={state.errors?.phone}
                   />
-                  <p className="text-xs text-white/40">
-                    Изпращаме потвърждение на този имейл.
-                  </p>
+                  <RequiredLegend />
                 </div>
               )}
 
-              <Input
+              <TextField
                 name="notes"
-                label="Бележка (по избор)"
+                label="Бележка"
                 placeholder="Например: нужни са ни ракети"
                 error={state.errors?.notes}
               />
@@ -471,34 +475,3 @@ function FilterChip({
   );
 }
 
-function Input({
-  name,
-  label,
-  error,
-  className = "",
-  ...rest
-}: {
-  name: string;
-  label: string;
-  error?: string;
-} & React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <div className={className}>
-      <label htmlFor={name} className="block text-xs text-white/60">
-        {label}
-      </label>
-      <input
-        id={name}
-        name={name}
-        aria-invalid={error ? true : undefined}
-        className="mt-1 w-full rounded-lg border border-white/10 bg-navy-900 px-3 py-2 text-sm text-white outline-none placeholder:text-white/25 focus:border-brand-500"
-        {...rest}
-      />
-      {error && (
-        <p role="alert" className="mt-1 text-xs text-red-400">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}

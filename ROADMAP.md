@@ -8,8 +8,9 @@ the same commit as the work it describes, and bump `version` in `package.json` t
 | --- | --- | --- |
 | [0.1.0](#010--booking-backend) | ✅ shipped | Postgres + Prisma, courts/users/bookings, Google + guest booking, admin panel, confirmation email |
 | [0.1.1](#011--euro-pricing-and-booking-extras) | ✅ shipped | Euro pricing, rentable rackets, floodlight surcharge, embedded map |
-| [0.2.0](#020--planned) | 📋 planned | Customer account area, cancellation by customer, recurring slots |
-| [0.3.0](#030--planned) | 📋 planned | Payments (Stripe), SMS reminders |
+| [0.2.0](#020--accounts-and-profiles) | ✅ shipped | Email/password registration, customer profile, form polish |
+| [0.3.0](#030--planned) | 📋 planned | Customer-initiated cancellation, email verification, club page |
+| [0.4.0](#040--planned) | 📋 planned | Payments (Stripe), SMS reminders |
 
 ---
 
@@ -285,15 +286,78 @@ charged.
 
 ---
 
-## 0.2.0 — Planned
+## 0.2.0 — Accounts and profiles
 
-- Customer account area at `/account` — booking history, upcoming reservations
-- Customer-initiated cancellation, with a cut-off window (e.g. no later than 12h before)
-- Recurring / season bookings for club members
-- Per-court schedule exceptions: holidays, maintenance, seasonal opening hours
-- Admin-created bookings on behalf of a walk-in customer
+Until now the only way to have an account was a Google one. This adds registration with
+email and password, and turns the bookings list into a profile.
+
+### Sign-in methods
+
+Two providers, both landing on the same `User` row:
+
+- **Google** — unchanged.
+- **Email and password** — a Credentials provider verifying a bcrypt hash (cost 12) held
+  in `User.passwordHash`. Null on guest rows and on Google-only accounts, so its presence
+  is also what decides whether password sign-in is possible at all.
+
+Sign-in failures are deliberately indistinguishable. Auth.js reports one generic error,
+and `authorize()` compares against a dummy hash when no account matches, so a missing
+email takes the same time as a wrong password. Without that, both the message and the
+response time would let anyone enumerate which addresses are registered.
+
+### Registering over a guest row
+
+An email that already exists is not automatically an error. A guest row is created by the
+act of booking, so most people registering already have one, and refusing them would be
+absurd. Registration claims that row in place, keeping the booking history — the same
+upgrade a Google sign-in performs.
+
+Refused instead is claiming a row somebody already controls: one with a password, or with
+a linked Google account.
+
+### What shipped
+
+- [x] `/register` — first name, last name, email, phone (optional), password + confirm
+- [x] `/login` rebuilt — email and password, Google, links to registration
+- [x] `/profile` replaces `/my-bookings`, which now redirects; account details are
+      editable, with bookings underneath
+- [x] Email is read-only on the profile: it identifies the account, ties guest bookings to
+      it and is what Google matches on, so editing it would quietly detach all three
+- [x] Required fields marked with a red asterisk across every form, from shared
+      primitives in `src/components/ui/Field.tsx` rather than per-form markup
+
+### Verified
+
+Driven through a real browser, not just typechecked: registering lands on the profile with
+the details pre-filled; signing out and back in returns there; profile edits persist across
+a reload; a duplicate registration is refused; and a wrong password gives the generic
+message. Separately, bcrypt round-trips, the dummy hash never matches, and claiming a guest
+row keeps its id while clearing `isGuest` and leaving `role` alone.
+
+### Deferred
+
+- **Email addresses are still unverified.** Registration trusts the address exactly as
+  guest booking and Google account-linking already do. Someone could register with an
+  address they do not own and inherit any guest bookings made under it. A one-time code
+  before the account becomes usable is the fix — held back because Brevo delivery from an
+  `abv.bg` sender is currently unreliable, so gating sign-in on a received email would
+  lock out real customers. It should land alongside a verified sending domain. → 0.3.0
+- **No password reset.** The login page says to contact the club rather than offering a
+  link that does nothing. Needs the same working email delivery. → 0.3.0
+- **No rate limiting on sign-in.** Nothing slows down repeated password guesses.
 
 ## 0.3.0 — Planned
+
+- Email verification on registration, once a sending domain is verified
+- Password reset by emailed link
+- Rate limiting on the sign-in and registration endpoints
+- Customer-initiated cancellation, with a cut-off window (e.g. no later than 12h before)
+- A `/za-kluba` page with club history and a photo gallery
+- Per-court schedule exceptions: holidays, maintenance, seasonal opening hours
+- Admin-created bookings on behalf of a walk-in customer
+- Recurring / season bookings for club members
+
+## 0.4.0 — Planned
 
 - Stripe payment on booking, with deposit vs. pay-on-site as a per-court setting
 - Refund handling on cancellation

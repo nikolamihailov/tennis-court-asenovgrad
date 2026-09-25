@@ -147,11 +147,11 @@ export default function MobileMenu({
                     )}
 
                     <MenuAction
-                      href="/my-bookings"
+                      href="/profile"
                       icon={<User size={16} />}
                       onClick={close}
                     >
-                      Моите резервации
+                      Моят профил
                     </MenuAction>
 
                     <p className="px-1 pt-1 text-xs text-white/35">
