@@ -27,19 +27,13 @@ export default async function ProfilePage() {
         lastName: true,
         phone: true,
         createdAt: true,
-        passwordHash: true,
         accounts: { select: { provider: true } },
       },
     }),
     listUserBookingsGrouped(session.id),
   ]);
 
-  const providers = account.accounts.map((a) => a.provider);
-  const signInMethod = providers.includes("google")
-    ? "Google"
-    : account.passwordHash
-      ? "имейл и парола"
-      : "—";
+  const isGoogleAccount = account.accounts.some((a) => a.provider === "google");
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
@@ -62,7 +56,7 @@ export default async function ProfilePage() {
             lastName={account.lastName}
             email={account.email}
             phone={account.phone}
-            signInMethod={signInMethod}
+            isGoogleAccount={isGoogleAccount}
           />
         </div>
       </section>

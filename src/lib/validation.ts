@@ -154,6 +154,15 @@ export const profileSchema = z.object({
   phone,
 });
 
+/**
+ * What a Google-backed account may change.
+ *
+ * Their name comes from the Google profile and is re-read on every sign-in, so accepting
+ * one here would be pointless — the next sign-in would overwrite it. The form renders
+ * those fields read-only; this is what stops a hand-crafted POST from getting further.
+ */
+export const profilePhoneOnlySchema = z.object({ phone });
+
 export const cancelBookingSchema = z.object({
   bookingId: z.string().trim().min(1),
   reason: optionalText(300),

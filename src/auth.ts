@@ -151,63 +151,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   events: {
     /**
-     * The Auth.js adapter only writes name/email/emailVerified/image. Split the Google
-     * display name into the first/last name the booking flow needs, and clear isGuest —
-     * this person now has a real account.
+     * Keep a Google-backed row in step with the Google profile, on every sign-in.
+     *
+     * Google owns the name for these accounts — the profile page shows it read-only and
+     * refuses to edit it — so it has to be re-read rather than filled in once. Doing this
+     * only when the fields were empty left stale values in place: the seeded admin row
+     * carried the literal name "Администратор" and kept it forever, because there was
+     * nothing missing to fill.
+     *
+     * `given_name` and `family_name` come straight from the OAuth profile, which splits
+     * the name properly instead of guessing at the first space — that guess mangles
+     * double-barrelled surnames and names written family-name-first.
      */
-    async createUser({ user }) {
-      if (!user.id) return;
+    async signIn({ user, account, profile }) {
+      if (!user.id || account?.provider !== "google" || !profile) return;
 
-      const [firstName, ...rest] = (user.name ?? "").trim().split(/\s+/);
+      const given = typeof profile.given_name === "string" ? profile.given_name : null;
+      const family = typeof profile.family_name === "string" ? profile.family_name : null;
+
+      // Fall back to splitting the display name only when Google omits the parts.
+      const [fallbackFirst, ...fallbackRest] = (profile.name ?? user.name ?? "")
+        .trim()
+        .split(/\s+/);
+
+      const firstName = given || fallbackFirst || null;
+      const lastName = family || (fallbackRest.length > 0 ? fallbackRest.join(" ") : null);
 
       await db.user.update({
         where: { id: user.id },
         data: {
           isGuest: false,
-          firstName: firstName || null,
-          lastName: rest.length > 0 ? rest.join(" ") : null,
+          firstName,
+          lastName,
+          name:
+            (typeof profile.name === "string" ? profile.name : null) ??
+            [firstName, lastName].filter(Boolean).join(" ") ??
+            undefined,
         },
       });
-    },
-
-    /**
-     * A Google sign-in claiming a row that already existed — either a guest who booked
-     * before, or an admin created by the seed. `createUser` does not fire in either case,
-     * so the row is promoted here instead.
-     *
-     * Names are filled in whenever they are missing, not only for guests, so a seeded
-     * admin ends up with their real name rather than a blank one. Existing values are
-     * never overwritten.
-     */
-    async linkAccount({ user }) {
-      if (!user.id) return;
-
-      const existing = await db.user.findUnique({
-        where: { id: user.id },
-        select: { isGuest: true, firstName: true, lastName: true, name: true },
-      });
-
-      if (!existing) return;
-
-      const [firstName, ...rest] = (user.name ?? existing.name ?? "")
-        .trim()
-        .split(/\s+/);
-
-      const patch: {
-        isGuest?: boolean;
-        name?: string;
-        firstName?: string;
-        lastName?: string;
-      } = {};
-
-      if (existing.isGuest) patch.isGuest = false;
-      if (!existing.name && user.name) patch.name = user.name;
-      if (!existing.firstName && firstName) patch.firstName = firstName;
-      if (!existing.lastName && rest.length > 0) patch.lastName = rest.join(" ");
-
-      if (Object.keys(patch).length > 0) {
-        await db.user.update({ where: { id: user.id }, data: patch });
-      }
     },
   },
 });

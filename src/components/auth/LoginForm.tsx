@@ -1,11 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
 import { loginAction, type AccountFormState } from "@/server/actions/account";
-import { FormMessage, RequiredLegend, TextField } from "@/components/ui/Field";
+import { FormMessage, TextField } from "@/components/ui/Field";
 
 export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const [state, formAction, pending] = useActionState<AccountFormState, FormData>(
@@ -32,6 +31,7 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
           name="password"
           label="Парола"
           type="password"
+          placeholder="•••••••••"
           autoComplete="current-password"
           required
           error={state.errors?.password}
@@ -52,16 +52,6 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
         {pending && <Loader2 size={16} className="animate-spin" />}
         {pending ? "Влизане…" : "Вход"}
       </button>
-
-      <div className="flex items-center justify-between gap-4">
-        <RequiredLegend />
-        <Link
-          href="/register"
-          className="text-xs font-medium text-brand-400 transition-colors hover:text-brand-300"
-        >
-          Създай профил
-        </Link>
-      </div>
     </form>
   );
 }

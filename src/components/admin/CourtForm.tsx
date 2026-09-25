@@ -8,12 +8,7 @@ import {
   updateCourtAction,
   type AdminFormState,
 } from "@/server/actions/admin";
-import {
-  FormMessage,
-  RequiredLegend,
-  SelectField,
-  TextField,
-} from "@/components/ui/Field";
+import { FormMessage, SelectField, TextField } from "@/components/ui/Field";
 import type { CourtDTO } from "@/server/courts";
 
 /**
@@ -50,6 +45,7 @@ export default function CourtForm({
           id={fieldId("name")}
           name="name"
           label="Име"
+          placeholder="Корт 1"
           defaultValue={court?.name}
           required
           error={state.errors?.name}
@@ -71,6 +67,7 @@ export default function CourtForm({
           id={fieldId("pricePerHour")}
           name="pricePerHour"
           label="Цена на час (€)"
+          placeholder="10.00"
           type="number"
           step="0.01"
           min="0"
@@ -83,6 +80,7 @@ export default function CourtForm({
           id={fieldId("sortOrder")}
           name="sortOrder"
           label="Подредба"
+          placeholder="1"
           type="number"
           min="0"
           defaultValue={court?.sortOrder ?? 0}
@@ -93,6 +91,7 @@ export default function CourtForm({
           id={fieldId("openingHour")}
           name="openingHour"
           label="Отваря в (час)"
+          placeholder="8"
           type="number"
           min="0"
           max="23"
@@ -105,6 +104,7 @@ export default function CourtForm({
           id={fieldId("closingHour")}
           name="closingHour"
           label="Затваря в (час)"
+          placeholder="22"
           type="number"
           min="1"
           max="24"
@@ -118,6 +118,7 @@ export default function CourtForm({
         id={fieldId("description")}
         name="description"
         label="Описание"
+        placeholder="Глинен корт на открито"
         defaultValue={court?.description ?? ""}
         error={state.errors?.description}
       />
@@ -126,6 +127,7 @@ export default function CourtForm({
         id={fieldId("imageUrl")}
         name="imageUrl"
         label="Снимка (път или URL)"
+        placeholder="/images/court.jpg"
         defaultValue={court?.imageUrl ?? "/images/court.jpg"}
         error={state.errors?.imageUrl}
       />
@@ -169,7 +171,6 @@ export default function CourtForm({
           </button>
         )}
 
-        <RequiredLegend className="ml-auto" />
       </div>
     </form>
   );

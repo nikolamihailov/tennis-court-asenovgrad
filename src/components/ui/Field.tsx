@@ -12,22 +12,13 @@
  *
  * Hidden from assistive technology on purpose: the input carries `required`, which screen
  * readers already announce, so exposing the asterisk too would have them say "star" after
- * every label. RequiredLegend explains the symbol for everyone reading visually.
+ * every label.
  */
 export function RequiredMark() {
   return (
     <span aria-hidden="true" className="ml-0.5 text-red-400">
       *
     </span>
-  );
-}
-
-/** Put this once per form that has required fields, so the asterisk means something. */
-export function RequiredLegend({ className = "" }: { className?: string }) {
-  return (
-    <p className={`text-xs text-white/40 ${className}`}>
-      <span className="text-red-400">*</span> задължително поле
-    </p>
   );
 }
 

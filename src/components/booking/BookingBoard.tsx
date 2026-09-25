@@ -12,7 +12,7 @@ import {
   MAX_RACKETS,
   RACKET_PRICE,
 } from "@/lib/pricing";
-import { RequiredLegend, TextField } from "@/components/ui/Field";
+import { TextField } from "@/components/ui/Field";
 import type { CourtAvailability } from "@/server/availability";
 
 const SURFACE_LABEL: Record<string, string> = {
@@ -367,6 +367,7 @@ export default function BookingBoard({
                     <TextField
                       name="firstName"
                       label="Име"
+                      placeholder="Иван"
                       autoComplete="given-name"
                       required
                       error={state.errors?.firstName}
@@ -374,6 +375,7 @@ export default function BookingBoard({
                     <TextField
                       name="lastName"
                       label="Фамилия"
+                      placeholder="Петров"
                       autoComplete="family-name"
                       required
                       error={state.errors?.lastName}
@@ -383,6 +385,7 @@ export default function BookingBoard({
                     name="email"
                     label="Имейл"
                     type="email"
+                    placeholder="ivan@example.com"
                     autoComplete="email"
                     required
                     hint="Изпращаме потвърждението тук."
@@ -396,7 +399,6 @@ export default function BookingBoard({
                     placeholder="0888 123 456"
                     error={state.errors?.phone}
                   />
-                  <RequiredLegend />
                 </div>
               )}
 
