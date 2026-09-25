@@ -42,7 +42,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      # Not `npm ci`: the lock file is written on Windows, where npm omits the optional
+      # @emnapi/* packages Linux resolves, so `npm ci` rejects it as out of sync. This job
+      # ships nothing, so it does not need ci's strict lock check.
+      - run: npm install --no-audit --no-fund
 
       - name: Apply pending migrations
         env:
