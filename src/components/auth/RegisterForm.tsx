@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { registerAction, type AccountFormState } from "@/server/actions/account";
-import { FormMessage, RequiredLegend, TextField } from "@/components/ui/Field";
+import { FormMessage, TextField } from "@/components/ui/Field";
 
 export default function RegisterForm() {
   const [state, formAction, pending] = useActionState<AccountFormState, FormData>(
@@ -18,6 +18,7 @@ export default function RegisterForm() {
         <TextField
           name="firstName"
           label="Име"
+          placeholder="Иван"
           autoComplete="given-name"
           required
           error={state.errors?.firstName}
@@ -25,6 +26,7 @@ export default function RegisterForm() {
         <TextField
           name="lastName"
           label="Фамилия"
+          placeholder="Петров"
           autoComplete="family-name"
           required
           error={state.errors?.lastName}
@@ -55,6 +57,7 @@ export default function RegisterForm() {
         name="password"
         label="Парола"
         type="password"
+        placeholder="•••••••••"
         autoComplete="new-password"
         required
         hint="Поне 8 символа."
@@ -65,6 +68,7 @@ export default function RegisterForm() {
         name="confirmPassword"
         label="Повтори паролата"
         type="password"
+        placeholder="•••••••••"
         autoComplete="new-password"
         required
         error={state.errors?.confirmPassword}
@@ -80,8 +84,6 @@ export default function RegisterForm() {
         {pending && <Loader2 size={16} className="animate-spin" />}
         {pending ? "Създаване…" : "Създай профил"}
       </button>
-
-      <RequiredLegend />
     </form>
   );
 }

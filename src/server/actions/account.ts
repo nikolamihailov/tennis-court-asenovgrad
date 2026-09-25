@@ -8,7 +8,13 @@ import bcrypt from "bcryptjs";
 import { signIn } from "@/auth";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/dal";
-import { fieldErrors, loginSchema, profileSchema, registerSchema } from "@/lib/validation";
+import {
+  fieldErrors,
+  loginSchema,
+  profilePhoneOnlySchema,
+  profileSchema,
+  registerSchema,
+} from "@/lib/validation";
 
 /** Work factor for bcrypt. 12 is the current sensible default. */
 const BCRYPT_ROUNDS = 12;
@@ -132,12 +138,39 @@ export async function loginAction(
   return {};
 }
 
-/** Update the fields a customer owns. Email is identity and role is staff-only. */
+/**
+ * Update the fields a customer owns. Email is identity and role is staff-only.
+ *
+ * What counts as "owned" depends on how they sign in. A Google account's name is re-read
+ * from the Google profile on every sign-in, so accepting one here would be a lie — the
+ * next sign-in would overwrite it. Those accounts may change only their phone number, and
+ * that is enforced here rather than only by the disabled inputs, which a direct POST
+ * would bypass.
+ */
 export async function updateProfileAction(
   _previous: AccountFormState,
   formData: FormData,
 ): Promise<AccountFormState> {
   const user = await requireUser();
+
+  const googleAccount = await db.account.findFirst({
+    where: { userId: user.id, provider: "google" },
+    select: { userId: true },
+  });
+
+  if (googleAccount) {
+    const parsed = profilePhoneOnlySchema.safeParse({ phone: formData.get("phone") });
+    if (!parsed.success) return { errors: fieldErrors(parsed.error) };
+
+    await db.user.update({
+      where: { id: user.id },
+      // Null rather than undefined, so clearing the field actually clears the column.
+      data: { phone: parsed.data.phone ?? null },
+    });
+
+    revalidatePath("/profile");
+    return { ok: true, message: "Телефонът е обновен." };
+  }
 
   const parsed = profileSchema.safeParse({
     firstName: formData.get("firstName"),
@@ -154,7 +187,6 @@ export async function updateProfileAction(
     data: {
       firstName,
       lastName,
-      // Null rather than undefined, so clearing the field actually clears the column.
       phone: phone ?? null,
       name: `${firstName} ${lastName}`.trim(),
     },
