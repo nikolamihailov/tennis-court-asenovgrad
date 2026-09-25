@@ -14,13 +14,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/**
+ * Auth.js reports several unrelated server-side failures as `Configuration` — a missing
+ * secret, a bad provider setup, and any error thrown by the database adapter, such as a
+ * migration that has not been applied. The earlier message here blamed the Google
+ * credentials specifically, which sent debugging in the wrong direction; the real cause
+ * is only visible in the server logs.
+ */
 const ERROR_MESSAGES: Record<string, string> = {
   forbidden: "Нямаш достъп до администраторския панел с този профил.",
   CredentialsSignin: "Грешен имейл или парола.",
   OAuthAccountNotLinked: "Този имейл вече се използва с друг метод за вход.",
   AccessDenied: "Входът беше отказан.",
   Configuration:
-    "Входът с Google не е конфигуриран. Провери GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET.",
+    "Входът е временно недостъпен поради проблем със сървъра. Опитай отново по-късно или се свържи с клуба.",
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
