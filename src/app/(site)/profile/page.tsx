@@ -65,7 +65,10 @@ export default async function ProfilePage() {
         title="Предстоящи резервации"
         bookings={bookings.upcoming}
         empty="Нямаш предстоящи резервации."
+        offerBooking
       />
+      {/* No booking link under the past list: booking a court cannot produce history,
+          so the invitation would lead nowhere useful. */}
       <Section
         title="Минали резервации"
         bookings={bookings.past}
@@ -83,10 +86,12 @@ function Section({
   title,
   bookings,
   empty,
+  offerBooking = false,
 }: {
   title: string;
   bookings: BookingDTO[];
   empty: string;
+  offerBooking?: boolean;
 }) {
   return (
     <section className="mt-10">
@@ -96,11 +101,16 @@ function Section({
 
       {bookings.length === 0 ? (
         <p className="mt-3 rounded-xl border border-white/5 bg-navy-800 p-5 text-sm text-white/50">
-          {empty}{" "}
-          <Link href="/booking" className="text-brand-400 hover:text-brand-300">
-            Резервирай корт
-          </Link>
-          .
+          {empty}
+          {offerBooking && (
+            <>
+              {" "}
+              <Link href="/booking" className="text-brand-400 hover:text-brand-300">
+                Резервирай корт
+              </Link>
+              .
+            </>
+          )}
         </p>
       ) : (
         <ul className="mt-3 space-y-3">
