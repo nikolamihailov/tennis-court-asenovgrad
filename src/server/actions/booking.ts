@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/dal";
 import { sendBookingConfirmation } from "@/lib/mail";
-import { absoluteUrl, manageBookingPath } from "@/lib/url";
+import { absoluteUrl, bookingPath, manageBookingPath } from "@/lib/url";
 import type { BookingDuration } from "@/lib/pricing";
 import { fieldErrors, guestBookingSchema, userBookingSchema } from "@/lib/validation";
 import { BookingError, createBooking, resolveGuestUser } from "@/server/bookings";
@@ -89,6 +89,7 @@ export async function createBookingAction(
   }
 
   let reference: string;
+  let token: string;
 
   try {
     const { booking, manageToken } = await createBooking(userId, {
@@ -96,6 +97,7 @@ export async function createBookingAction(
       bookedAsGuest,
     });
     reference = booking.reference;
+    token = manageToken;
 
     // Awaited rather than fired and forgotten: on serverless the function can be frozen
     // the moment the response is sent, which would drop an un-awaited send. Delivery
@@ -117,5 +119,6 @@ export async function createBookingAction(
   }
 
   revalidatePath("/booking");
-  redirect(`/booking/${reference}`);
+  // With the token, so a guest — who has no session — still sees their own details.
+  redirect(bookingPath(reference, { token }));
 }

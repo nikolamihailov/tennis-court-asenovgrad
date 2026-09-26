@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarCheck, Mail } from "lucide-react";
+import { CalendarCheck, Lock, Mail } from "lucide-react";
 
 import { formatEur } from "@/lib/pricing";
 import {
@@ -11,11 +11,13 @@ import {
 } from "@/lib/time";
 import { getCurrentUser } from "@/lib/dal";
 import { manageBookingPath } from "@/lib/url";
-import { getBookingByReference } from "@/server/bookings";
+import { authorizeBookingAccess, getBookingByReference } from "@/server/bookings";
 
 export const metadata: Metadata = {
   title: "Потвърдена резервация — Тенис клуб Асеновград",
   robots: { index: false, follow: false },
+  // The URL can carry the secret manage token. Never send it to another site as a Referer.
+  referrer: "no-referrer",
 };
 
 export default async function BookingConfirmationPage({
@@ -23,20 +25,32 @@ export default async function BookingConfirmationPage({
   searchParams,
 }: PageProps<"/booking/[reference]">) {
   const { reference } = await params;
-  const { done } = await searchParams;
-  const [booking, user] = await Promise.all([
-    getBookingByReference(reference),
-    getCurrentUser(),
-  ]);
+  const { done, t } = await searchParams;
+  const token = typeof t === "string" ? t : undefined;
+  const user = await getCurrentUser();
+
+  // The reference alone shows only what the court sheet would: court, time, status.
+  // Who booked, what they pay and why it was cancelled need the secret link from the
+  // email or the owner's session — the same check as the manage page. References are
+  // short and read out over the phone, so they cannot be what guards personal data.
+  const privateView = await authorizeBookingAccess(reference, {
+    token,
+    userId: user?.id,
+  });
+  const booking = privateView ?? (await getBookingByReference(reference));
 
   if (!booking) notFound();
+
+  // Staff see everything in the admin panel anyway, so hiding it here would only get in
+  // their way when they open a customer's link.
+  const showPrivate = privateView !== null || user?.role === "ADMIN";
 
   const cancelled = booking.status === "CANCELLED";
   const moved = done === "moved" && !cancelled;
 
-  // This page is public by reference, so the manage link is only offered to the signed-in
-  // owner. Everyone else manages through the tokenised link in their email.
-  const canManage = user?.id === booking.user.id && booking.customerCanChange;
+  // Offered to whoever may act on the booking: the owner's session, or the token holder,
+  // whose token is passed on so the manage page can check it again.
+  const canManage = privateView !== null && booking.customerCanChange;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-16">
@@ -77,28 +91,40 @@ export default async function BookingConfirmationPage({
             label="Час"
             value={`${formatClubTime(booking.startsAt)} – ${formatClubTime(booking.endsAt)}`}
           />
-          {booking.racketCount > 0 && (
-            <Row label="Ракети" value={`${booking.racketCount} бр.`} />
+          {showPrivate && (
+            <>
+              {booking.racketCount > 0 && (
+                <Row label="Ракети" value={`${booking.racketCount} бр.`} />
+              )}
+              {booking.lighting && <Row label="Осветление" value="включено" />}
+              <Row label="Общо" value={formatEur(booking.totalPrice)} />
+              <Row
+                label="На името на"
+                value={
+                  [booking.user.firstName, booking.user.lastName]
+                    .filter(Boolean)
+                    .join(" ") || booking.user.email
+                }
+              />
+            </>
           )}
-          {booking.lighting && <Row label="Осветление" value="включено" />}
-          <Row label="Общо" value={formatEur(booking.totalPrice)} />
-          <Row
-            label="На името на"
-            value={
-              [booking.user.firstName, booking.user.lastName]
-                .filter(Boolean)
-                .join(" ") || booking.user.email
-            }
-          />
         </dl>
 
-        {cancelled && booking.cancellationReason && (
+        {!showPrivate && (
+          <p className="mt-4 flex items-start gap-2 text-sm text-white/50">
+            <Lock size={16} className="mt-0.5 shrink-0" />
+            Личните данни и цената се виждат само чрез линка от имейла с потвърждението
+            или след вход в профила.
+          </p>
+        )}
+
+        {showPrivate && cancelled && booking.cancellationReason && (
           <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             Причина: {booking.cancellationReason}
           </p>
         )}
 
-        {!cancelled && (
+        {showPrivate && !cancelled && (
           <p className="mt-4 flex items-start gap-2 text-sm text-white/50">
             <Mail size={16} className="mt-0.5 shrink-0" />
             Изпратихме потвърждение на {booking.user.email}. Запази номера на
@@ -109,7 +135,7 @@ export default async function BookingConfirmationPage({
         <div className="mt-8 flex flex-wrap gap-3">
           {canManage && (
             <Link
-              href={manageBookingPath(booking.reference)}
+              href={manageBookingPath(booking.reference, token)}
               className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-semibold text-white/80 transition-colors hover:text-white"
             >
               Премести или откажи
