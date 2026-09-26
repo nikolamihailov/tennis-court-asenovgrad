@@ -6,6 +6,7 @@ import { BarChart3, CalendarRange, LayoutGrid, LogOut, Users } from "lucide-reac
 import logo from "@/assets/logo.png";
 import { signOut } from "@/auth";
 import { requireAdmin } from "@/lib/dal";
+import Avatar from "@/components/ui/Avatar";
 
 export const metadata: Metadata = {
   title: "Администрация — Тенис клуб Асеновград",
@@ -53,14 +54,32 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link
               href="/"
-              className="hidden text-sm text-white/60 transition-colors hover:text-white sm:inline"
+              className="mr-1 hidden text-sm text-white/60 transition-colors hover:text-white sm:inline"
             >
               Към сайта
             </Link>
-            <span className="hidden text-sm text-white/40 lg:inline">{admin.email}</span>
+
+            {/* Same account controls as the site navbar, so the two headers agree: the
+                avatar carries the identity (name/email in the tooltip) instead of a
+                bare email address. */}
+            <Link
+              href="/profile"
+              title={`Моят профил (${admin.firstName || admin.email})`}
+              aria-label="Моят профил"
+              className="flex items-center rounded-full transition-opacity hover:opacity-80"
+            >
+              <Avatar
+                src={admin.image}
+                firstName={admin.firstName}
+                lastName={admin.lastName}
+                email={admin.email}
+                size={38}
+              />
+            </Link>
+
             <form
               action={async () => {
                 "use server";
@@ -71,9 +90,9 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
                 type="submit"
                 title="Изход"
                 aria-label="Изход"
-                className="flex items-center rounded-full border border-white/15 p-2 text-white/60 transition-colors hover:text-white"
+                className="flex items-center rounded-lg border border-white/15 p-2.5 text-white/60 transition-colors hover:text-white"
               >
-                <LogOut size={15} />
+                <LogOut size={16} />
               </button>
             </form>
           </div>
