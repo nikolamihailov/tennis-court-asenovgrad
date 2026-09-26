@@ -29,6 +29,25 @@ export function manageBookingPath(reference: string, token?: string): string {
 }
 
 /**
+ * A booking's confirmation page.
+ *
+ * Without a token it shows only court, time and status. The token — or the owner's
+ * session — unlocks the name, email and price, so redirects after booking, cancelling or
+ * moving pass it on; a guest has no session to fall back on.
+ */
+export function bookingPath(
+  reference: string,
+  { token, done }: { token?: string; done?: "cancelled" | "moved" } = {},
+): string {
+  const query = new URLSearchParams();
+  if (done) query.set("done", done);
+  if (token) query.set("t", token);
+
+  const path = `/booking/${encodeURIComponent(reference)}`;
+  return query.size > 0 ? `${path}?${query.toString()}` : path;
+}
+
+/**
  * An absolute URL on this site, for links that leave the browser (emails).
  *
  * `SITE_URL` wins when set. Otherwise Vercel's production domain, which Vercel sets on

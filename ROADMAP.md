@@ -160,12 +160,14 @@ Not bugs — decisions to keep 0.1.0 shippable:
   booking or before closing (see `buildSlots` in `src/server/availability.ts`).
 - **Times are handled in `Europe/Sofia`** and stored as UTC `timestamptz`. There is no
   multi-timezone support and none is wanted.
-- **`/booking/<reference>` is public and unthrottled.** Anyone holding a reference can see
-  that booking's court, time, and the customer's name and email — that is what makes the
-  link in the confirmation email work without an account. References are random over a
-  ~1×10⁹ space, so guessing one is impractical, but there is no rate limiting to stop
-  someone grinding through the space. Add throttling, or require the email address
-  alongside the reference, before treating the page as private. → 0.2.0
+- **`/booking/<reference>` shows only court, time and status to a bare reference.** The
+  customer's name, email, price and cancellation reason need the secret token from the
+  confirmation email (`?t=…`), the owner's session, or an admin session — the same check
+  as the manage page (`authorizeBookingAccess`). Redirects after booking, cancelling and
+  moving carry the token, so a guest still sees their own details. The page is still
+  unthrottled, but guessing a reference now reveals nothing personal.
+- **Login and registration are not rate limited.** Password guessing is limited only by
+  bcrypt's cost. Needs a shared store (e.g. Upstash) for the counters on serverless.
 - **Guest bookings trust an unverified email.** Typing a registered member's address
   attaches the booking to their account and sends them the confirmation. Profile details
   are never overwritten for a non-guest row, which limits the damage, but the underlying
