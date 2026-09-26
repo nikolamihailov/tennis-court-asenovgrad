@@ -124,7 +124,10 @@ export async function cancelBookingAction(
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
   try {
-    const booking = await cancelBooking(parsed.data.bookingId, parsed.data.reason);
+    const booking = await cancelBooking(parsed.data.bookingId, {
+      reason: parsed.data.reason,
+      by: "CLUB",
+    });
     await sendBookingCancellation(booking);
   } catch (error) {
     if (error instanceof BookingError) return { message: error.message };

@@ -138,10 +138,14 @@ export function buildSlots({
  * One query covers all courts for the day rather than one per court. The overlap test is
  * `startsAt < dayEnd AND endsAt > dayStart`, which also catches a booking that starts
  * before midnight and runs into the day.
+ *
+ * `excludeBookingId` leaves one booking out — the one being rescheduled, so its current
+ * time reads as free and it can be shifted by half an hour into its own slot.
  */
 export async function loadDayBookings(
   courtIds: string[],
   isoDate: string,
+  excludeBookingId?: string,
 ): Promise<Map<string, BookedInterval[]>> {
   // The end of the day is midnight on the *next calendar date*, not start + 24h. On the
   // two DST days a club-local day is 23 or 25 hours long, and the naive version either
@@ -156,6 +160,7 @@ export async function loadDayBookings(
       courtId: { in: courtIds },
       startsAt: { lt: dayEnd },
       endsAt: { gt: dayStart },
+      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
     },
     select: { courtId: true, startsAt: true, endsAt: true },
   });
@@ -178,7 +183,7 @@ export async function loadDayBookings(
  */
 export async function getAvailability(
   isoDate: string,
-  options: { courtId?: string; now?: Date } = {},
+  options: { courtId?: string; now?: Date; excludeBookingId?: string } = {},
 ): Promise<CourtAvailability[]> {
   const now = options.now ?? new Date();
 
@@ -192,6 +197,7 @@ export async function getAvailability(
   const bookingsByCourt = await loadDayBookings(
     courts.map((court) => court.id),
     isoDate,
+    options.excludeBookingId,
   );
 
   return courts.map((court) => {

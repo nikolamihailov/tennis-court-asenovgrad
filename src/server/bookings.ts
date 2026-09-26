@@ -1,11 +1,13 @@
 import "server-only";
 
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+
 import { db } from "@/lib/db";
 import { clubDateMinuteToUtc, addDaysToIsoDate, clubToday } from "@/lib/time";
 import { bookingTotal, clampRackets, type BookingDuration } from "@/lib/pricing";
 import { BOOKING_HORIZON_DAYS, buildSlots, loadDayBookings } from "./availability";
 import { toCourtPrices } from "./courts";
-import type { BookingStatus } from "@/generated/prisma/enums";
+import type { BookingStatus, CancelledBy } from "@/generated/prisma/enums";
 
 /** Postgres SQLSTATE for an exclusion constraint violation. */
 const EXCLUSION_VIOLATION = "23P01";
@@ -14,6 +16,15 @@ const TAKEN_MESSAGE = "Този час вече е зает. Моля, избе�
 
 /** How many times to retry a booking insert that hit a duplicate reference. */
 const REFERENCE_ATTEMPTS = 3;
+
+/**
+ * Customers may cancel or move a booking themselves until this long before it starts.
+ * Past that, the club has little chance to refill the court, so they have to call.
+ */
+export const CUSTOMER_CHANGE_CUTOFF_MINUTES = 120;
+
+const CUTOFF_MESSAGE =
+  "Промени са възможни до 2 часа преди началото. Моля, свържете се с клуба.";
 
 export type BookingDTO = {
   id: string;
@@ -28,8 +39,14 @@ export type BookingDTO = {
   bookedAsGuest: boolean;
   /** True once the slot is over. Cancelling is refused past this point. */
   hasEnded: boolean;
+  /** True while the customer may still cancel or move it themselves. */
+  customerCanChange: boolean;
+  /** Length in minutes, derived from the times. */
+  durationMinutes: number;
   cancelledAt: Date | null;
   cancellationReason: string | null;
+  cancelledBy: CancelledBy | null;
+  rescheduledAt: Date | null;
   createdAt: Date;
   court: { id: string; name: string; surface: string; isIndoor: boolean };
   user: {
@@ -58,17 +75,59 @@ const bookingInclude = {
 
 type BookingRow = {
   totalPrice: { toString(): string };
-} & Omit<BookingDTO, "totalPrice" | "hasEnded">;
+  manageTokenHash?: string | null;
+} & Omit<BookingDTO, "totalPrice" | "hasEnded" | "customerCanChange" | "durationMinutes">;
 
-function toBookingDTO(booking: BookingRow): BookingDTO {
+/** Whether the customer may still cancel or move a booking themselves. */
+function customerCanChange(
+  booking: { status: BookingStatus; startsAt: Date },
+  now = Date.now(),
+): boolean {
+  return (
+    booking.status === "CONFIRMED" &&
+    booking.startsAt.getTime() - now > CUSTOMER_CHANGE_CUTOFF_MINUTES * 60_000
+  );
+}
+
+// The token hash is pulled out and dropped: DTOs reach pages and props, and the hash has
+// no business anywhere outside the functions that check it.
+function toBookingDTO(row: BookingRow): BookingDTO {
+  const booking = { ...row };
+  delete booking.manageTokenHash;
+
   return {
     ...booking,
     totalPrice: Number(booking.totalPrice.toString()),
+    durationMinutes: Math.round(
+      (booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000,
+    ),
     // Derived here rather than in the components that need it: reading the clock during
-    // render is a React purity violation, and this keeps the rule that decides whether
-    // cancelling is still possible next to the one enforcing it in cancelBooking().
+    // render is a React purity violation, and this keeps the rules that decide whether
+    // cancelling is still possible next to the ones enforcing them below.
     hasEnded: booking.endsAt.getTime() <= Date.now(),
+    customerCanChange: customerCanChange(booking),
   };
+}
+
+/**
+ * A fresh secret for the "manage your booking" link, and the hash that gets stored.
+ * 32 random bytes — unguessable, unlike the 6-character reference.
+ */
+function generateManageToken(): { token: string; hash: string } {
+  const token = randomBytes(32).toString("base64url");
+  return { token, hash: hashManageToken(token) };
+}
+
+function hashManageToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Constant-time comparison, so response timing reveals nothing about the stored hash. */
+function manageTokenMatches(token: string, storedHash: string | null): boolean {
+  if (!storedHash) return false;
+  const given = Buffer.from(hashManageToken(token), "hex");
+  const stored = Buffer.from(storedHash, "hex");
+  return given.length === stored.length && timingSafeEqual(given, stored);
 }
 
 /**
@@ -178,11 +237,14 @@ export async function resolveGuestUser(input: {
  * on its own — two requests for the same slot can both pass it before either commits.
  * The `Booking_no_overlap` exclusion constraint is what actually prevents the double
  * booking; losing that race is caught below and reported as a taken slot.
+ *
+ * Returns the raw manage token alongside the booking. It exists only in this return
+ * value — the database keeps its hash — so the caller must put it in the email now.
  */
 export async function createBooking(
   userId: string,
   input: CreateBookingInput,
-): Promise<BookingDTO> {
+): Promise<{ booking: BookingDTO; manageToken: string }> {
   const court = await db.court.findUnique({
     where: { id: input.courtId },
     select: {
@@ -221,55 +283,8 @@ export async function createBooking(
     isIndoor: court.isIndoor,
   });
 
-  if (
-    input.startMinute < court.openingHour * 60 ||
-    input.startMinute + input.duration > court.closingHour * 60
-  ) {
-    throw new BookingError(
-      "Избраният час е извън работното време на корта.",
-      "startMinute",
-    );
-  }
-
-  const today = clubToday();
-  if (input.date < today) {
-    throw new BookingError("Не може да резервирате в миналото.", "date");
-  }
-
-  if (input.date > addDaysToIsoDate(today, BOOKING_HORIZON_DAYS)) {
-    throw new BookingError(
-      `Може да резервирате най-много ${BOOKING_HORIZON_DAYS} дни напред.`,
-      "date",
-    );
-  }
-
-  const startsAt = clubDateMinuteToUtc(input.date, input.startMinute);
-  const endsAt = new Date(startsAt.getTime() + input.duration * 60 * 1000);
-
-  // Checked against the same generator the booking page renders from, so the only starts
-  // accepted are the ones customers are actually shown — full hours, plus the half hours
-  // that fill a gap. See buildSlots().
-  const dayBookings = await loadDayBookings([court.id], input.date);
-  const slot = buildSlots({
-    court,
-    isoDate: input.date,
-    duration: input.duration,
-    bookings: dayBookings.get(court.id) ?? [],
-    now: new Date(),
-  }).find((candidate) => candidate.start === input.startMinute);
-
-  if (slot?.reason === "past") {
-    throw new BookingError("Този час вече е минал.", "startMinute");
-  }
-  if (slot?.reason === "booked") {
-    throw new BookingError(TAKEN_MESSAGE, "startMinute");
-  }
-  if (!slot) {
-    throw new BookingError(
-      "Този начален час не се предлага. Моля, изберете от списъка.",
-      "startMinute",
-    );
-  }
+  const { startsAt, endsAt } = await assertSlotBookable(court, input);
+  const manageToken = generateManageToken();
 
   // References are random, so a collision is possible even if unlikely. Retrying turns
   // a 1-in-a-billion unrecoverable 500 into a second attempt the customer never sees.
@@ -288,11 +303,12 @@ export async function createBooking(
           lighting,
           notes: input.notes,
           bookedAsGuest: input.bookedAsGuest,
+          manageTokenHash: manageToken.hash,
         },
         include: bookingInclude,
       });
 
-      return toBookingDTO(booking);
+      return { booking: toBookingDTO(booking), manageToken: manageToken.token };
     } catch (error) {
       if (isExclusionViolation(error)) {
         throw new BookingError(TAKEN_MESSAGE, "startMinute");
@@ -306,6 +322,71 @@ export async function createBooking(
 
   // Unreachable: the loop either returns or throws.
   throw new BookingError("Възникна грешка при запазването. Моля, опитайте отново.");
+}
+
+type SlotRequest = { date: string; startMinute: number; duration: BookingDuration };
+
+/**
+ * Throw a readable BookingError unless the slot can be booked, and return its instants.
+ *
+ * Shared by booking and rescheduling so both obey the same rules. The slot is checked
+ * against the same generator the booking page renders from, so the only starts accepted
+ * are the ones customers are actually shown — full hours, plus the half hours that fill
+ * a gap. See buildSlots(). `excludeBookingId` is the booking being moved, which must not
+ * count as blocking its own new time.
+ */
+async function assertSlotBookable(
+  court: { id: string; openingHour: number; closingHour: number },
+  request: SlotRequest,
+  excludeBookingId?: string,
+): Promise<{ startsAt: Date; endsAt: Date }> {
+  if (
+    request.startMinute < court.openingHour * 60 ||
+    request.startMinute + request.duration > court.closingHour * 60
+  ) {
+    throw new BookingError(
+      "Избраният час е извън работното време на корта.",
+      "startMinute",
+    );
+  }
+
+  const today = clubToday();
+  if (request.date < today) {
+    throw new BookingError("Не може да резервирате в миналото.", "date");
+  }
+
+  if (request.date > addDaysToIsoDate(today, BOOKING_HORIZON_DAYS)) {
+    throw new BookingError(
+      `Може да резервирате най-много ${BOOKING_HORIZON_DAYS} дни напред.`,
+      "date",
+    );
+  }
+
+  const dayBookings = await loadDayBookings([court.id], request.date, excludeBookingId);
+  const slot = buildSlots({
+    court,
+    isoDate: request.date,
+    duration: request.duration,
+    bookings: dayBookings.get(court.id) ?? [],
+    now: new Date(),
+  }).find((candidate) => candidate.start === request.startMinute);
+
+  if (slot?.reason === "past") {
+    throw new BookingError("Този час вече е минал.", "startMinute");
+  }
+  if (slot?.reason === "booked") {
+    throw new BookingError(TAKEN_MESSAGE, "startMinute");
+  }
+  if (!slot) {
+    throw new BookingError(
+      "Този начален час не се предлага. Моля, изберете от списъка.",
+      "startMinute",
+    );
+  }
+
+  const startsAt = clubDateMinuteToUtc(request.date, request.startMinute);
+  const endsAt = new Date(startsAt.getTime() + request.duration * 60 * 1000);
+  return { startsAt, endsAt };
 }
 
 /** A unique-constraint violation on Booking.reference. */
@@ -359,14 +440,20 @@ export async function getBookingByReference(
   return booking ? toBookingDTO(booking) : null;
 }
 
-/** Cancel a booking, freeing the slot. The row is kept so admin still has the history. */
+/**
+ * Cancel a booking, freeing the slot. The row is kept so admin still has the history.
+ *
+ * Staff may cancel until the slot ends. A customer only until the cut-off before it
+ * starts — the caller says which, and must have already checked they may act on it
+ * (see authorizeBookingAccess()).
+ */
 export async function cancelBooking(
   bookingId: string,
-  reason?: string,
+  { reason, by }: { reason?: string; by: CancelledBy },
 ): Promise<BookingDTO> {
   const existing = await db.booking.findUnique({
     where: { id: bookingId },
-    select: { status: true, endsAt: true },
+    select: { status: true, startsAt: true, endsAt: true },
   });
 
   if (!existing) throw new BookingError("Резервацията не е намерена.");
@@ -382,17 +469,160 @@ export async function cancelBooking(
     throw new BookingError("Не може да откажете приключила резервация.");
   }
 
-  const booking = await db.booking.update({
+  if (by === "CUSTOMER" && !customerCanChange(existing)) {
+    throw new BookingError(CUTOFF_MESSAGE);
+  }
+
+  try {
+    const booking = await db.booking.update({
+      // Status in the filter too: if the booking was cancelled between the read above
+      // and this write, the update matches nothing instead of cancelling it twice.
+      where: { id: bookingId, status: "CONFIRMED" },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+        cancellationReason: reason,
+        cancelledBy: by,
+      },
+      include: bookingInclude,
+    });
+
+    return toBookingDTO(booking);
+  } catch (error) {
+    if (isRecordNotFound(error)) {
+      throw new BookingError("Резервацията вече е отказана.");
+    }
+    throw error;
+  }
+}
+
+/**
+ * Move a customer's booking to another date, time or length, on the same court.
+ *
+ * Extras (rackets, lighting) carry over and the total is recomputed at today's price for
+ * the new length — the same as booking afresh. The move is a single UPDATE, so the
+ * exclusion constraint still guards it: if someone takes the new slot first, nothing
+ * changes and the customer keeps their original time.
+ *
+ * The manage token is rotated, because the confirmation email for the new time carries a
+ * new link. The raw token is returned for that email and not kept anywhere.
+ */
+export async function rescheduleBooking(
+  bookingId: string,
+  request: SlotRequest,
+): Promise<{ booking: BookingDTO; manageToken: string }> {
+  const existing = await db.booking.findUnique({
     where: { id: bookingId },
-    data: {
-      status: "CANCELLED",
-      cancelledAt: new Date(),
-      cancellationReason: reason,
+    select: {
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      racketCount: true,
+      lighting: true,
+      court: {
+        select: {
+          id: true,
+          isActive: true,
+          isIndoor: true,
+          openingHour: true,
+          closingHour: true,
+          price60: true,
+          price90: true,
+          price120: true,
+        },
+      },
     },
+  });
+
+  if (!existing) throw new BookingError("Резервацията не е намерена.");
+  if (existing.status === "CANCELLED") {
+    throw new BookingError("Резервацията е отказана и не може да бъде преместена.");
+  }
+  if (!customerCanChange(existing)) throw new BookingError(CUTOFF_MESSAGE);
+
+  const { court } = existing;
+  if (!court.isActive) {
+    throw new BookingError(
+      "Кортът в момента не приема резервации. Моля, свържете се с клуба.",
+    );
+  }
+
+  const { startsAt, endsAt } = await assertSlotBookable(court, request, bookingId);
+
+  if (
+    startsAt.getTime() === existing.startsAt.getTime() &&
+    endsAt.getTime() === existing.endsAt.getTime()
+  ) {
+    throw new BookingError("Това е текущият час на резервацията. Изберете друг.", "startMinute");
+  }
+
+  const totalPrice = bookingTotal({
+    courtPrice: toCourtPrices(court)[request.duration],
+    racketCount: existing.racketCount,
+    lighting: existing.lighting,
+    isIndoor: court.isIndoor,
+  });
+
+  const manageToken = generateManageToken();
+
+  try {
+    const booking = await db.booking.update({
+      where: { id: bookingId, status: "CONFIRMED" },
+      data: {
+        startsAt,
+        endsAt,
+        totalPrice,
+        manageTokenHash: manageToken.hash,
+        rescheduledAt: new Date(),
+      },
+      include: bookingInclude,
+    });
+
+    return { booking: toBookingDTO(booking), manageToken: manageToken.token };
+  } catch (error) {
+    if (isExclusionViolation(error)) {
+      throw new BookingError(TAKEN_MESSAGE, "startMinute");
+    }
+    if (isRecordNotFound(error)) {
+      throw new BookingError("Резервацията е отказана и не може да бъде преместена.");
+    }
+    throw error;
+  }
+}
+
+/**
+ * The booking behind a manage link or profile button, if the caller may act on it.
+ *
+ * Two ways in: the secret token from the email (anyone holding the link — that is the
+ * point of it), or being signed in as the person the booking belongs to. The reference
+ * alone is never enough: it is short, printed on screens, and read out over the phone.
+ *
+ * Every page render *and* every action must call this. Server Actions accept direct
+ * POSTs, so the page having checked proves nothing about the request in hand.
+ */
+export async function authorizeBookingAccess(
+  reference: string,
+  { token, userId }: { token?: string; userId?: string },
+): Promise<BookingDTO | null> {
+  const booking = await db.booking.findUnique({
+    where: { reference },
     include: bookingInclude,
   });
 
-  return toBookingDTO(booking);
+  if (!booking) return null;
+
+  const allowed =
+    (token !== undefined && manageTokenMatches(token, booking.manageTokenHash)) ||
+    (userId !== undefined && booking.userId === userId);
+
+  return allowed ? toBookingDTO(booking) : null;
+}
+
+/** Prisma's "the row to update did not match", e.g. the status changed under us. */
+function isRecordNotFound(error: unknown): boolean {
+  return (
+    !!error && typeof error === "object" && (error as { code?: string }).code === "P2025"
+  );
 }
 
 export type BookingFilters = {

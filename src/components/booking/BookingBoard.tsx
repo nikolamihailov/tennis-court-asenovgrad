@@ -2,11 +2,10 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, Clock, Loader2, MapPin, Sparkles } from "lucide-react";
+import { CalendarDays, Loader2 } from "lucide-react";
 
 import { createBookingAction, type BookingFormState } from "@/server/actions/booking";
 import {
-  BOOKING_DURATIONS,
   bookingTotal,
   formatDuration,
   formatEur,
@@ -16,12 +15,13 @@ import {
   type BookingDuration,
 } from "@/lib/pricing";
 import { TextField } from "@/components/ui/Field";
+import {
+  CourtHeading,
+  DurationPicker,
+  FilterChip,
+  SlotGrid,
+} from "@/components/booking/SlotGrid";
 import type { CourtAvailability } from "@/server/availability";
-
-const SURFACE_LABEL: Record<string, string> = {
-  CLAY: "Глина",
-  HARD: "Твърда настилка",
-};
 
 type CurrentUser = {
   firstName: string | null;
@@ -166,27 +166,13 @@ export default function BookingBoard({
 
           {/* Every length's slots are already loaded, so switching needs no round trip.
               The slot list is different for each length, so a pick does not carry over. */}
-          <div className="flex w-full flex-wrap items-center gap-3 border-t border-white/5 pt-4">
-            <span className="flex items-center gap-2 text-sm text-white/60">
-              <Clock size={16} className="text-white/50" />
-              Продължителност
-            </span>
-            <div role="group" aria-label="Продължителност" className="flex flex-wrap gap-2">
-              {BOOKING_DURATIONS.map((option) => (
-                <FilterChip
-                  key={option}
-                  active={duration === option}
-                  onClick={() => {
-                    if (option === duration) return;
-                    setDuration(option);
-                    setSelection(null);
-                  }}
-                >
-                  {formatDuration(option)}
-                </FilterChip>
-              ))}
-            </div>
-          </div>
+          <DurationPicker
+            value={duration}
+            onChange={(next) => {
+              setDuration(next);
+              setSelection(null);
+            }}
+          />
         </div>
 
         {availability.length === 0 && (
@@ -203,95 +189,37 @@ export default function BookingBoard({
             isRefreshing ? "pointer-events-none opacity-50" : ""
           }`}
         >
-          {availability.map(({ court, slots: slotsByDuration }) => {
-            const slots = slotsByDuration[duration];
-            const freeCount = slots.filter((slot) => slot.available).length;
+          {availability.map(({ court, slots }) => (
+            <section
+              key={court.id}
+              className="rounded-2xl border border-white/5 bg-navy-800 p-6"
+            >
+              <CourtHeading court={court} duration={duration} />
 
-            return (
-              <section
-                key={court.id}
-                className="rounded-2xl border border-white/5 bg-navy-800 p-6"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <div>
-                    <h2 className="font-semibold">{court.name}</h2>
-                    <div className="mt-1 flex items-center gap-4 text-xs text-white/60">
-                      <span className="flex items-center gap-1">
-                        <MapPin size={13} />
-                        {SURFACE_LABEL[court.surface] ?? court.surface}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Sparkles size={13} />
-                        {court.isIndoor ? "Закрит" : "Открит"}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm font-semibold">
-                    {formatEur(court.prices[duration])}
-                    <span className="font-normal text-white/50">
-                      {" "}
-                      / {formatDuration(duration)}
-                    </span>
-                  </p>
-                </div>
-
-                {freeCount === 0 ? (
-                  <p className="mt-4 text-sm text-white/50">
-                    Няма свободни часове за този ден.
-                  </p>
-                ) : (
-                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                    {slots.map((slot) => {
-                      const isSelected =
-                        selection?.courtId === court.id &&
-                        selection.duration === duration &&
-                        selection.start === slot.start;
-
-                      return (
-                        <button
-                          key={slot.start}
-                          type="button"
-                          disabled={!slot.available}
-                          aria-pressed={isSelected}
-                          onClick={() => {
-                            setSelection({
-                              courtId: court.id,
-                              courtName: court.name,
-                              start: slot.start,
-                              duration,
-                              label: slot.label,
-                              price: court.prices[duration],
-                              isIndoor: court.isIndoor,
-                            });
-                            // Lighting is not offered indoors, so a leftover tick from a
-                            // previously selected outdoor court must not carry over.
-                            if (court.isIndoor) setLighting(false);
-                          }}
-                          title={
-                            slot.reason === "booked"
-                              ? "Часът е зает"
-                              : slot.reason === "past"
-                                ? "Часът вече е минал"
-                                : undefined
-                          }
-                          className={[
-                            "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                            isSelected
-                              ? "border-brand-500 bg-brand-500 text-navy-950"
-                              : slot.available
-                                ? "border-white/10 bg-navy-900 text-white hover:border-brand-500/60"
-                                : "cursor-not-allowed border-white/5 bg-navy-900/40 text-white/25 line-through",
-                          ].join(" ")}
-                        >
-                          {slot.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            );
-          })}
+              <SlotGrid
+                slots={slots[duration]}
+                selectedStart={
+                  selection?.courtId === court.id && selection.duration === duration
+                    ? selection.start
+                    : null
+                }
+                onSelect={(slot) => {
+                  setSelection({
+                    courtId: court.id,
+                    courtName: court.name,
+                    start: slot.start,
+                    duration,
+                    label: slot.label,
+                    price: court.prices[duration],
+                    isIndoor: court.isIndoor,
+                  });
+                  // Lighting is not offered indoors, so a leftover tick from a
+                  // previously selected outdoor court must not carry over.
+                  if (court.isIndoor) setLighting(false);
+                }}
+              />
+            </section>
+          ))}
         </div>
       </div>
 
@@ -489,30 +417,3 @@ function Row({
     </div>
   );
 }
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={[
-        "rounded-full px-4 py-2 text-sm font-medium transition-colors",
-        active
-          ? "bg-brand-500 text-navy-950"
-          : "border border-white/10 bg-navy-900 text-white/70 hover:text-white",
-      ].join(" ")}
-    >
-      {children}
-    </button>
-  );
-}
-

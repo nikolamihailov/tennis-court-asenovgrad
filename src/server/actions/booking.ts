@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/dal";
 import { sendBookingConfirmation } from "@/lib/mail";
+import { absoluteUrl, manageBookingPath } from "@/lib/url";
 import type { BookingDuration } from "@/lib/pricing";
 import { fieldErrors, guestBookingSchema, userBookingSchema } from "@/lib/validation";
 import { BookingError, createBooking, resolveGuestUser } from "@/server/bookings";
@@ -90,14 +91,20 @@ export async function createBookingAction(
   let reference: string;
 
   try {
-    const booking = await createBooking(userId, { ...slot, bookedAsGuest });
+    const { booking, manageToken } = await createBooking(userId, {
+      ...slot,
+      bookedAsGuest,
+    });
     reference = booking.reference;
 
     // Awaited rather than fired and forgotten: on serverless the function can be frozen
     // the moment the response is sent, which would drop an un-awaited send. Delivery
     // failures are swallowed inside sendBookingConfirmation — the booking is already
     // committed and must not be reported as failed because email was down.
-    await sendBookingConfirmation(booking);
+    await sendBookingConfirmation(
+      booking,
+      absoluteUrl(manageBookingPath(booking.reference, manageToken)),
+    );
   } catch (error) {
     if (error instanceof BookingError) {
       return { errors: { [error.field]: error.message }, message: error.message };

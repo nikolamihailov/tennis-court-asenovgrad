@@ -16,3 +16,31 @@ export function safeCallbackUrl(value: unknown, fallback = "/"): string {
   if (value.includes("\\")) return fallback;
   return value;
 }
+
+/**
+ * Where a customer manages (cancels or moves) a booking.
+ *
+ * The token is what authorises someone who is not signed in — it comes from the email.
+ * Signed-in owners use the same page without one; see authorizeBookingAccess().
+ */
+export function manageBookingPath(reference: string, token?: string): string {
+  const path = `/booking/${encodeURIComponent(reference)}/manage`;
+  return token ? `${path}?t=${encodeURIComponent(token)}` : path;
+}
+
+/**
+ * An absolute URL on this site, for links that leave the browser (emails).
+ *
+ * `SITE_URL` wins when set. Otherwise Vercel's production domain, which Vercel sets on
+ * every deployment, so production works with no configuration. Local dev falls through to
+ * localhost. Only read on the server — none of these are NEXT_PUBLIC_.
+ */
+export function absoluteUrl(path: string): string {
+  const configured =
+    process.env.SITE_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "http://localhost:3000");
+
+  return `${configured.replace(/\/+$/, "")}${path}`;
+}
