@@ -168,13 +168,31 @@ export default async function AdminBookingsPage({
                       {formatClubTime(booking.startsAt)}–
                       {formatClubTime(booking.endsAt)}
                     </p>
+                    {booking.rescheduledAt && (
+                      <p className="mt-0.5 text-xs text-brand-400/80">преместена от клиента</p>
+                    )}
                   </td>
                   <td className="px-5 py-3 text-right font-medium">
                     {formatEur(booking.totalPrice)}
                   </td>
                   <td className="px-5 py-3">
                     {booking.status === "CANCELLED" ? (
-                      <Badge tone="danger">Отказана</Badge>
+                      <>
+                        <Badge tone="danger">Отказана</Badge>
+                        {/* Who cancelled matters to staff: a customer freeing the court is
+                            routine, the club cancelling is something they did themselves. */}
+                        <p className="mt-1 text-xs text-white/45">
+                          {booking.cancelledBy === "CUSTOMER" ? "от клиента" : "от клуба"}
+                        </p>
+                        {booking.cancellationReason && (
+                          <p
+                            className="mt-0.5 max-w-48 truncate text-xs text-white/35"
+                            title={booking.cancellationReason}
+                          >
+                            {booking.cancellationReason}
+                          </p>
+                        )}
+                      </>
                     ) : booking.hasEnded ? (
                       <Badge>Приключила</Badge>
                     ) : (

@@ -9,6 +9,8 @@ import {
   formatClubTime,
   formatClubWeekday,
 } from "@/lib/time";
+import { getCurrentUser } from "@/lib/dal";
+import { manageBookingPath } from "@/lib/url";
 import { getBookingByReference } from "@/server/bookings";
 
 export const metadata: Metadata = {
@@ -18,13 +20,23 @@ export const metadata: Metadata = {
 
 export default async function BookingConfirmationPage({
   params,
+  searchParams,
 }: PageProps<"/booking/[reference]">) {
   const { reference } = await params;
-  const booking = await getBookingByReference(reference);
+  const { done } = await searchParams;
+  const [booking, user] = await Promise.all([
+    getBookingByReference(reference),
+    getCurrentUser(),
+  ]);
 
   if (!booking) notFound();
 
   const cancelled = booking.status === "CANCELLED";
+  const moved = done === "moved" && !cancelled;
+
+  // This page is public by reference, so the manage link is only offered to the signed-in
+  // owner. Everyone else manages through the tokenised link in their email.
+  const canManage = user?.id === booking.user.id && booking.customerCanChange;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-16">
@@ -38,12 +50,20 @@ export default async function BookingConfirmationPage({
         </div>
 
         <h1 className="mt-5 text-2xl font-bold">
-          {cancelled ? "Резервацията е отказана" : "Резервацията е потвърдена"}
+          {cancelled
+            ? "Резервацията е отказана"
+            : moved
+              ? "Резервацията е преместена"
+              : "Резервацията е потвърдена"}
         </h1>
         <p className="mt-1 text-white/60">
           {cancelled
-            ? "Тази резервация вече не е активна."
-            : "Очакваме те на корта. Моля, ела 10 минути по-рано."}
+            ? done === "cancelled"
+              ? "Кортът е освободен. Изпратихме потвърждение на имейла ти."
+              : "Тази резервация вече не е активна."
+            : moved
+              ? "Изпратихме новите детайли и нов линк за промяна на имейла ти."
+              : "Очакваме те на корта. Моля, ела 10 минути по-рано."}
         </p>
 
         <dl className="mt-6 space-y-2 rounded-xl bg-navy-900 p-5 text-sm">
@@ -87,6 +107,14 @@ export default async function BookingConfirmationPage({
         )}
 
         <div className="mt-8 flex flex-wrap gap-3">
+          {canManage && (
+            <Link
+              href={manageBookingPath(booking.reference)}
+              className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-semibold text-white/80 transition-colors hover:text-white"
+            >
+              Премести или откажи
+            </Link>
+          )}
           <Link
             href="/booking"
             className="rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-navy-950 transition-colors hover:bg-brand-400"

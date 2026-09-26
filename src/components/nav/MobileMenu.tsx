@@ -184,7 +184,7 @@ export default function MobileMenu({
                   </>
                 ) : (
                   <MenuAction href="/login" icon={<LogIn size={16} />} onClick={close}>
-                    Вход с Google
+                    Вход
                   </MenuAction>
                 )}
 

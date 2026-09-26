@@ -9,7 +9,7 @@ the same commit as the work it describes, and bump `version` in `package.json` t
 | [0.1.0](#010--booking-backend) | ✅ shipped | Postgres + Prisma, courts/users/bookings, Google + guest booking, admin panel, confirmation email |
 | [0.1.1](#011--euro-pricing-and-booking-extras) | ✅ shipped | Euro pricing, rentable rackets, floodlight surcharge, embedded map |
 | [0.2.0](#020--accounts-and-profiles) | ✅ shipped | Email/password registration, customer profile, form polish |
-| [0.3.0](#030--planned) | 📋 planned | Customer-initiated cancellation, email verification, club page |
+| [0.3.0](#030--planned) | 📋 planned | Email verification, club page |
 | [0.4.0](#040--planned) | 📋 planned | Payments (Stripe), SMS reminders |
 
 ---
@@ -143,8 +143,11 @@ Both of these differ from older tutorials and from what most tooling assumes:
 
 Not bugs — decisions to keep 0.1.0 shippable:
 
-- **Customers cannot cancel their own booking.** They contact the club; an admin cancels it.
-  → 0.2.0
+- **Customers can cancel or move their own booking until 2 hours before it starts** — from
+  the tokenised link in the confirmation email, or from their profile when signed in. Closer
+  than that they call the club; staff can still cancel until the slot ends. The club is not
+  emailed about customer changes; the admin bookings list shows who cancelled and flags
+  moved bookings.
 - **No payments.** `Booking.totalPrice` is recorded for analytics; money is collected on
   site. The Stripe env vars in `.env.example` are unused. → 0.3.0
 - **No SMS.** Twilio env vars are unused. → 0.3.0

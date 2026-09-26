@@ -75,7 +75,10 @@ export default function Hero() {
 
       <div className="relative mx-auto w-full max-w-7xl px-6 pb-14 pt-24 md:py-32">
         <div className="mx-auto max-w-xl text-center md:mx-0 md:text-left">
-          <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-400/25 bg-brand-400/10 px-3.5 py-1.5 text-xs font-medium text-brand-300 md:mb-5 md:border-0 md:bg-transparent md:p-0 md:text-sm md:text-brand-400">
+          {/* On mobile the pill sits straight on the clay photo, where a green tint alone
+              washed out — a light navy wash keeps it readable. Desktop has the dark
+              gradient behind it, so it drops back to plain text there. */}
+          <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-400/30 bg-navy-950/30 px-3.5 py-1.5 text-xs font-medium text-brand-300 backdrop-blur-[2px] md:mb-5 md:border-0 md:bg-transparent md:p-0 md:text-sm md:text-brand-400 md:backdrop-blur-none">
             <MapPin size={15} />
             Асеновград, България
           </span>

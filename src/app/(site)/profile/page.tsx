@@ -6,6 +6,7 @@ import Avatar from "@/components/ui/Avatar";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/dal";
 import { formatEur } from "@/lib/pricing";
+import { manageBookingPath } from "@/lib/url";
 import { formatClubDateLong, formatClubTime, formatClubWeekday } from "@/lib/time";
 import { listUserBookingsGrouped, type BookingDTO } from "@/server/bookings";
 
@@ -91,7 +92,8 @@ export default async function ProfilePage() {
       />
 
       <p className="mt-10 text-xs text-white/35">
-        За отказване на резервация се свържи с клуба и посочи номера ѝ.
+        Можеш да откажеш или преместиш резервация до 2 часа преди началото. След това —
+        свържи се с клуба и посочи номера ѝ.
       </p>
     </div>
   );
@@ -147,6 +149,14 @@ function Section({
               </div>
 
               <div className="flex items-center gap-4">
+                {booking.customerCanChange && (
+                  <Link
+                    href={manageBookingPath(booking.reference)}
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium text-white/80 transition-colors hover:border-brand-500/60 hover:text-white"
+                  >
+                    Промени
+                  </Link>
+                )}
                 <span className="text-sm font-semibold">
                   {formatEur(booking.totalPrice)}
                 </span>

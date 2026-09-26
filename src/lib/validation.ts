@@ -51,20 +51,24 @@ export const availabilityQuerySchema = z.object({
   courtId: z.string().trim().min(1).optional(),
 });
 
+/** Minutes since club-local midnight. Whether it is actually offered is checked later. */
+const startMinute = z.coerce
+  .number()
+  .int({ error: "Невалиден час." })
+  .min(0, { error: "Невалиден час." })
+  .max(24 * 60 - 1, { error: "Невалиден час." });
+
+const duration = z.coerce
+  .number()
+  .refine(isBookingDuration, { error: "Невалидна продължителност." })
+  .transform((value) => value as BookingDuration);
+
 /** Shared shape of a booking request, before we know who is booking. */
 const bookingSlotSchema = z.object({
   courtId: z.string().trim().min(1, { error: "Изберете корт." }),
   date: isoDate,
-  /** Minutes since club-local midnight. Whether it is actually offered is checked later. */
-  startMinute: z.coerce
-    .number()
-    .int({ error: "Невалиден час." })
-    .min(0, { error: "Невалиден час." })
-    .max(24 * 60 - 1, { error: "Невалиден час." }),
-  duration: z.coerce
-    .number()
-    .refine(isBookingDuration, { error: "Невалидна продължителност." })
-    .transform((value) => value as BookingDuration),
+  startMinute,
+  duration,
   notes: optionalText(500),
 
   racketCount: z.coerce
@@ -175,6 +179,29 @@ export const profilePhoneOnlySchema = z.object({ phone });
 export const cancelBookingSchema = z.object({
   bookingId: z.string().trim().min(1),
   reason: optionalText(300),
+});
+
+/**
+ * Which booking a customer is acting on, and how they prove they may.
+ * `token` is the secret from the email link; absent when acting from the profile.
+ */
+const managedBooking = {
+  reference: z.string().trim().min(1).max(40),
+  token: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((value) => (value ? value.trim() : undefined)),
+};
+
+export const customerCancelSchema = z.object({
+  ...managedBooking,
+  reason: optionalText(300),
+});
+
+export const rescheduleSchema = z.object({
+  ...managedBooking,
+  date: isoDate,
+  startMinute,
+  duration,
 });
 
 export type GuestBookingInput = z.infer<typeof guestBookingSchema>;

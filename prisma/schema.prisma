@@ -29,6 +29,13 @@ enum BookingStatus {
   CANCELLED
 }
 
+/// Who cancelled a booking. Staff could cancel before customers could, so older
+/// cancellations are backfilled as CLUB.
+enum CancelledBy {
+  CUSTOMER
+  CLUB
+}
+
 /// One row per person, whether or not they ever sign in.
 ///
 /// Guests who book get a row with `isGuest = true` and no linked Account. Booking again
@@ -127,6 +134,16 @@ model Booking {
 
   cancelledAt        DateTime?
   cancellationReason String?
+  cancelledBy        CancelledBy?
+
+  /// SHA-256 of the secret in the "manage your booking" email link. Only the hash is kept,
+  /// so reading the database is not enough to cancel someone's booking. Rotated on every
+  /// reschedule, since the new confirmation email carries a new link. Null for bookings
+  /// made before self-service existed; those can still be managed from the profile.
+  manageTokenHash String?
+
+  /// Set when the customer moved the booking to another time.
+  rescheduledAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
