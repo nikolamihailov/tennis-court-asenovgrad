@@ -9,7 +9,14 @@ import {
   type AdminFormState,
 } from "@/server/actions/admin";
 import { FormMessage, SelectField, TextField } from "@/components/ui/Field";
+import { BOOKING_DURATIONS, formatDuration, type BookingDuration } from "@/lib/pricing";
 import type { CourtDTO } from "@/server/courts";
+
+const PRICE_PLACEHOLDER: Record<BookingDuration, string> = {
+  60: "10.00",
+  90: "15.00",
+  120: "20.00",
+};
 
 /**
  * Create/edit form for a court.
@@ -64,19 +71,6 @@ export default function CourtForm({
         </SelectField>
 
         <TextField
-          id={fieldId("pricePerHour")}
-          name="pricePerHour"
-          label="Цена на час (€)"
-          placeholder="10.00"
-          type="number"
-          step="0.01"
-          min="0"
-          defaultValue={court?.pricePerHour}
-          required
-          error={state.errors?.pricePerHour}
-        />
-
-        <TextField
           id={fieldId("sortOrder")}
           name="sortOrder"
           label="Подредба"
@@ -113,6 +107,28 @@ export default function CourtForm({
           error={state.errors?.closingHour}
         />
       </div>
+
+      {/* One price per game length, set independently so longer games can be discounted. */}
+      <fieldset>
+        <legend className="text-xs font-medium text-white/70">Цени (€)</legend>
+        <div className="mt-1.5 grid gap-4 sm:grid-cols-3">
+          {BOOKING_DURATIONS.map((duration) => (
+            <TextField
+              key={duration}
+              id={fieldId(`price${duration}`)}
+              name={`price${duration}`}
+              label={formatDuration(duration)}
+              placeholder={PRICE_PLACEHOLDER[duration]}
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue={court?.prices[duration]}
+              required
+              error={state.errors?.[`price${duration}`]}
+            />
+          ))}
+        </div>
+      </fieldset>
 
       <TextField
         id={fieldId("description")}

@@ -69,7 +69,7 @@ export default function Courts({ courts }: { courts: CourtDTO[] }) {
 
                 <div className="mt-4 flex items-center justify-between">
                   <p className="font-semibold">
-                    {formatEur(court.pricePerHour)}{" "}
+                    {formatEur(court.prices[60])}{" "}
                     <span className="text-sm text-white/50">/ час</span>
                   </p>
                   <Link

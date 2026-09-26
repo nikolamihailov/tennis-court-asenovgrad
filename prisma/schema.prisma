@@ -69,18 +69,24 @@ model User {
 
 /// A bookable court. Opening hours are plain integers (8 -> 22) in Europe/Sofia local
 /// time; there is no separate schedule table until per-day hours are actually needed.
+///
+/// A booking lasts 60, 90 or 120 minutes, and each length has its own price rather than
+/// a per-hour rate times duration — clubs usually discount the longer games, and the
+/// admin sets all three.
 model Court {
-  id           String       @id @default(cuid())
-  name         String
-  surface      CourtSurface @default(CLAY)
-  isIndoor     Boolean      @default(false)
-  pricePerHour Decimal      @db.Decimal(10, 2)
-  description  String?
-  imageUrl     String?
-  openingHour  Int          @default(8)
-  closingHour  Int          @default(22)
-  isActive     Boolean      @default(true)
-  sortOrder    Int          @default(0)
+  id          String       @id @default(cuid())
+  name        String
+  surface     CourtSurface @default(CLAY)
+  isIndoor    Boolean      @default(false)
+  price60     Decimal      @db.Decimal(10, 2)
+  price90     Decimal      @db.Decimal(10, 2)
+  price120    Decimal      @db.Decimal(10, 2)
+  description String?
+  imageUrl    String?
+  openingHour Int          @default(8)
+  closingHour Int          @default(22)
+  isActive    Boolean      @default(true)
+  sortOrder   Int          @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

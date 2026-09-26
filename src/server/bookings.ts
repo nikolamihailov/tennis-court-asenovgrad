@@ -1,13 +1,16 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { clubDateHourToUtc, addDaysToIsoDate, clubToday } from "@/lib/time";
-import { bookingTotal, clampRackets } from "@/lib/pricing";
-import { BOOKING_HORIZON_DAYS, SLOT_DURATION_HOURS } from "./availability";
+import { clubDateMinuteToUtc, addDaysToIsoDate, clubToday } from "@/lib/time";
+import { bookingTotal, clampRackets, type BookingDuration } from "@/lib/pricing";
+import { BOOKING_HORIZON_DAYS, buildSlots, loadDayBookings } from "./availability";
+import { toCourtPrices } from "./courts";
 import type { BookingStatus } from "@/generated/prisma/enums";
 
 /** Postgres SQLSTATE for an exclusion constraint violation. */
 const EXCLUSION_VIOLATION = "23P01";
+
+const TAKEN_MESSAGE = "Този час вече е зает. Моля, изберете друг.";
 
 /** How many times to retry a booking insert that hit a duplicate reference. */
 const REFERENCE_ATTEMPTS = 3;
@@ -97,7 +100,9 @@ export class BookingError extends Error {
 export type CreateBookingInput = {
   courtId: string;
   date: string;
-  hour: number;
+  /** Minutes since club-local midnight. */
+  startMinute: number;
+  duration: BookingDuration;
   notes?: string;
   bookedAsGuest: boolean;
   racketCount?: number;
@@ -186,7 +191,9 @@ export async function createBooking(
       isIndoor: true,
       openingHour: true,
       closingHour: true,
-      pricePerHour: true,
+      price60: true,
+      price90: true,
+      price120: true,
     },
   });
 
@@ -208,17 +215,20 @@ export async function createBooking(
   }
 
   const totalPrice = bookingTotal({
-    pricePerHour: Number(court.pricePerHour.toString()),
+    courtPrice: toCourtPrices(court)[input.duration],
     racketCount,
     lighting,
     isIndoor: court.isIndoor,
   });
 
   if (
-    input.hour < court.openingHour ||
-    input.hour + SLOT_DURATION_HOURS > court.closingHour
+    input.startMinute < court.openingHour * 60 ||
+    input.startMinute + input.duration > court.closingHour * 60
   ) {
-    throw new BookingError("Избраният час е извън работното време на корта.", "hour");
+    throw new BookingError(
+      "Избраният час е извън работното време на корта.",
+      "startMinute",
+    );
   }
 
   const today = clubToday();
@@ -233,11 +243,32 @@ export async function createBooking(
     );
   }
 
-  const startsAt = clubDateHourToUtc(input.date, input.hour);
-  const endsAt = new Date(startsAt.getTime() + SLOT_DURATION_HOURS * 60 * 60 * 1000);
+  const startsAt = clubDateMinuteToUtc(input.date, input.startMinute);
+  const endsAt = new Date(startsAt.getTime() + input.duration * 60 * 1000);
 
-  if (startsAt.getTime() <= Date.now()) {
-    throw new BookingError("Този час вече е минал.", "hour");
+  // Checked against the same generator the booking page renders from, so the only starts
+  // accepted are the ones customers are actually shown — full hours, plus the half hours
+  // that fill a gap. See buildSlots().
+  const dayBookings = await loadDayBookings([court.id], input.date);
+  const slot = buildSlots({
+    court,
+    isoDate: input.date,
+    duration: input.duration,
+    bookings: dayBookings.get(court.id) ?? [],
+    now: new Date(),
+  }).find((candidate) => candidate.start === input.startMinute);
+
+  if (slot?.reason === "past") {
+    throw new BookingError("Този час вече е минал.", "startMinute");
+  }
+  if (slot?.reason === "booked") {
+    throw new BookingError(TAKEN_MESSAGE, "startMinute");
+  }
+  if (!slot) {
+    throw new BookingError(
+      "Този начален час не се предлага. Моля, изберете от списъка.",
+      "startMinute",
+    );
   }
 
   // References are random, so a collision is possible even if unlikely. Retrying turns
@@ -264,7 +295,7 @@ export async function createBooking(
       return toBookingDTO(booking);
     } catch (error) {
       if (isExclusionViolation(error)) {
-        throw new BookingError("Този час вече е зает. Моля, изберете друг.", "hour");
+        throw new BookingError(TAKEN_MESSAGE, "startMinute");
       }
       if (isReferenceCollision(error) && attempt < REFERENCE_ATTEMPTS - 1) {
         continue;
