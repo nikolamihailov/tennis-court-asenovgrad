@@ -76,6 +76,18 @@ export function clubDateHourToUtc(isoDate: string, hour: number): Date {
   return clubTimeToUtc(year, month, day, hour);
 }
 
+/** Parse an ISO `YYYY-MM-DD` date plus minutes since club-local midnight into a UTC instant. */
+export function clubDateMinuteToUtc(isoDate: string, minuteOfDay: number): Date {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return clubTimeToUtc(year, month, day, Math.floor(minuteOfDay / 60), minuteOfDay % 60);
+}
+
+/** `HH:MM` for a number of minutes since midnight, e.g. 570 -> "09:30". */
+export function formatMinuteOfDay(minuteOfDay: number): string {
+  const wrapped = ((minuteOfDay % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
+}
+
 /** The club-local calendar parts of a UTC instant. */
 export function clubDateParts(instant: Date): {
   year: number;

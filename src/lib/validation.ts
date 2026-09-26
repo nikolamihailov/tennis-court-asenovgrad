@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { isValidIsoDate } from "./time";
-import { MAX_RACKETS } from "./pricing";
+import { isBookingDuration, MAX_RACKETS, type BookingDuration } from "./pricing";
 
 const isoDate = z
   .string()
@@ -55,11 +55,16 @@ export const availabilityQuerySchema = z.object({
 const bookingSlotSchema = z.object({
   courtId: z.string().trim().min(1, { error: "Изберете корт." }),
   date: isoDate,
-  hour: z.coerce
+  /** Minutes since club-local midnight. Whether it is actually offered is checked later. */
+  startMinute: z.coerce
     .number()
     .int({ error: "Невалиден час." })
     .min(0, { error: "Невалиден час." })
-    .max(23, { error: "Невалиден час." }),
+    .max(24 * 60 - 1, { error: "Невалиден час." }),
+  duration: z.coerce
+    .number()
+    .refine(isBookingDuration, { error: "Невалидна продължителност." })
+    .transform((value) => value as BookingDuration),
   notes: optionalText(500),
 
   racketCount: z.coerce
@@ -89,6 +94,11 @@ export const userBookingSchema = bookingSlotSchema.extend({
   phone,
 });
 
+const price = z.coerce
+  .number({ error: "Въведете цена." })
+  .positive({ error: "Цената трябва да е положително число." })
+  .max(10000, { error: "Цената изглежда твърде висока." });
+
 export const courtSchema = z.object({
   name: z
     .string()
@@ -97,10 +107,9 @@ export const courtSchema = z.object({
     .max(60, { error: "Максимум 60 символа." }),
   surface: z.enum(["CLAY", "HARD"], { error: "Изберете настилка." }),
   isIndoor: z.coerce.boolean(),
-  pricePerHour: z.coerce
-    .number({ error: "Въведете цена." })
-    .positive({ error: "Цената трябва да е положително число." })
-    .max(10000, { error: "Цената изглежда твърде висока." }),
+  price60: price,
+  price90: price,
+  price120: price,
   description: optionalText(500),
   imageUrl: optionalText(500),
   openingHour: z.coerce.number().int().min(0).max(23),

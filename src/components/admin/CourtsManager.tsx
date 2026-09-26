@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 
 import CourtForm from "./CourtForm";
-import { formatEur } from "@/lib/pricing";
+import { BOOKING_DURATIONS, formatDuration, formatEur } from "@/lib/pricing";
 import { setCourtActiveAction } from "@/server/actions/admin";
 import type { CourtDTO } from "@/server/courts";
 
@@ -60,8 +60,13 @@ export default function CourtsManager({ courts }: { courts: CourtDTO[] }) {
                     {SURFACE_LABEL[court.surface] ?? court.surface} ·{" "}
                     {court.isIndoor ? "закрит" : "открит"} ·{" "}
                     {String(court.openingHour).padStart(2, "0")}:00–
-                    {String(court.closingHour).padStart(2, "0")}:00 ·{" "}
-                    {formatEur(court.pricePerHour)}/час
+                    {String(court.closingHour).padStart(2, "0")}:00
+                  </p>
+                  <p className="mt-1 text-sm text-white/55">
+                    {BOOKING_DURATIONS.map(
+                      (duration) =>
+                        `${formatDuration(duration)}: ${formatEur(court.prices[duration])}`,
+                    ).join(" · ")}
                   </p>
                 </div>
 

@@ -18,15 +18,18 @@ const prisma = new PrismaClient({
 /**
  * The three courts the marketing site already advertised, now as real rows.
  *
- * Prices are in euro. They were 20 / 20 / 25 lv., converted at the fixed rate of
- * 1.95583 and rounded to whole euro, so the real price is unchanged for customers.
+ * Prices are in euro. The 60-minute ones were 20 / 20 / 25 lv., converted at the fixed
+ * rate of 1.95583 and rounded to whole euro, so the real price is unchanged for customers.
+ * The 90- and 120-minute prices start at the straight multiple; the admin can change them.
  */
 const courts = [
   {
     name: "Корт 1",
     surface: "CLAY" as const,
     isIndoor: false,
-    pricePerHour: 10,
+    price60: 10,
+    price90: 15,
+    price120: 20,
     description: "Класически глинен корт на открито.",
     imageUrl: "/images/court.jpg",
     openingHour: 8,
@@ -37,7 +40,9 @@ const courts = [
     name: "Корт 2",
     surface: "CLAY" as const,
     isIndoor: false,
-    pricePerHour: 10,
+    price60: 10,
+    price90: 15,
+    price120: 20,
     description: "Глинен корт на открито с вечерно осветление.",
     imageUrl: "/images/court.jpg",
     openingHour: 8,
@@ -48,7 +53,9 @@ const courts = [
     name: "Корт 3",
     surface: "HARD" as const,
     isIndoor: true,
-    pricePerHour: 13,
+    price60: 13,
+    price90: 19.5,
+    price120: 26,
     description: "Закрит корт с твърда настилка — игра при всякакво време.",
     imageUrl: "/images/court.jpg",
     openingHour: 8,

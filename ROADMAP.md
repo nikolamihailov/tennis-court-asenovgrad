@@ -152,7 +152,9 @@ Not bugs — decisions to keep 0.1.0 shippable:
   admin" screen. Run `npm run db:seed` with `SEED_ADMIN_EMAIL` set.
 - **No per-court schedule exceptions** (holidays, maintenance windows, seasonal hours).
   Opening hours are two integers per court.
-- **Bookings are whole hours** aligned to the hour. No 90-minute or half-hour slots.
+- **Bookings last 60, 90 or 120 minutes**, each priced per court by the admin. Starts are
+  on the full hour; a half-hour start is offered only where it fills a gap next to another
+  booking or before closing (see `buildSlots` in `src/server/availability.ts`).
 - **Times are handled in `Europe/Sofia`** and stored as UTC `timestamptz`. There is no
   multi-timezone support and none is wanted.
 - **`/booking/<reference>` is public and unthrottled.** Anyone holding a reference can see

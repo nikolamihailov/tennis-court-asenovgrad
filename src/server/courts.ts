@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import type { CourtPrices } from "@/lib/pricing";
 import type { CourtSurface } from "@/generated/prisma/enums";
 
 /**
@@ -8,14 +9,16 @@ import type { CourtSurface } from "@/generated/prisma/enums";
  *
  * Prisma returns `Decimal` for money columns, which cannot cross the Server/Client
  * Component boundary — it is a class instance, not a plain value. Every read path
- * converts to `number` here so no component has to remember to.
+ * converts to `number` here so no component has to remember to. The three price columns
+ * are gathered into `prices`, keyed by duration, so callers index by the chosen length
+ * instead of switching over column names.
  */
 export type CourtDTO = {
   id: string;
   name: string;
   surface: CourtSurface;
   isIndoor: boolean;
-  pricePerHour: number;
+  prices: CourtPrices;
   description: string | null;
   imageUrl: string | null;
   openingHour: number;
@@ -29,7 +32,9 @@ const courtSelect = {
   name: true,
   surface: true,
   isIndoor: true,
-  pricePerHour: true,
+  price60: true,
+  price90: true,
+  price120: true,
   description: true,
   imageUrl: true,
   openingHour: true,
@@ -38,12 +43,25 @@ const courtSelect = {
   sortOrder: true,
 } as const;
 
-type CourtRow = {
-  pricePerHour: { toString(): string };
-} & Omit<CourtDTO, "pricePerHour">;
+type Money = { toString(): string };
 
-function toCourtDTO(court: CourtRow): CourtDTO {
-  return { ...court, pricePerHour: Number(court.pricePerHour.toString()) };
+type CourtRow = {
+  price60: Money;
+  price90: Money;
+  price120: Money;
+} & Omit<CourtDTO, "prices">;
+
+/** The three price columns as a duration-keyed record of numbers. */
+export function toCourtPrices(row: { price60: Money; price90: Money; price120: Money }): CourtPrices {
+  return {
+    60: Number(row.price60.toString()),
+    90: Number(row.price90.toString()),
+    120: Number(row.price120.toString()),
+  };
+}
+
+function toCourtDTO({ price60, price90, price120, ...court }: CourtRow): CourtDTO {
+  return { ...court, prices: toCourtPrices({ price60, price90, price120 }) };
 }
 
 /** Courts customers can book, in display order. */

@@ -18,6 +18,23 @@ export const LIGHTING_PRICE = 4;
 /** Most rackets a customer can add to a single booking. */
 export const MAX_RACKETS = 4;
 
+/** The game lengths customers can book, in minutes. Each has its own price per court. */
+export const BOOKING_DURATIONS = [60, 90, 120] as const;
+
+export type BookingDuration = (typeof BOOKING_DURATIONS)[number];
+
+/** A court's price for each game length, in euro. */
+export type CourtPrices = Record<BookingDuration, number>;
+
+export function isBookingDuration(value: number): value is BookingDuration {
+  return (BOOKING_DURATIONS as readonly number[]).includes(value);
+}
+
+/** e.g. "90 мин" — short enough for a chip or a price suffix. */
+export function formatDuration(minutes: number): string {
+  return `${minutes} мин`;
+}
+
 export type BookingExtras = {
   racketCount: number;
   lighting: boolean;
@@ -26,19 +43,23 @@ export type BookingExtras = {
 /**
  * Total for one booking.
  *
+ * `courtPrice` is the court's price for the chosen duration, not an hourly rate — the
+ * admin prices each length, so a 90-minute game is not simply 1.5 × the hour. Extras are
+ * charged per booking whatever its length.
+ *
  * Lighting is only chargeable on outdoor courts — the indoor court is lit anyway — so
  * `isIndoor` is required here rather than trusting the caller to have checked.
  */
 export function bookingTotal({
-  pricePerHour,
+  courtPrice,
   racketCount,
   lighting,
   isIndoor,
-}: BookingExtras & { pricePerHour: number; isIndoor: boolean }): number {
+}: BookingExtras & { courtPrice: number; isIndoor: boolean }): number {
   const rackets = clampRackets(racketCount) * RACKET_PRICE;
   const floodlights = lighting && !isIndoor ? LIGHTING_PRICE : 0;
 
-  return pricePerHour + rackets + floodlights;
+  return courtPrice + rackets + floodlights;
 }
 
 /** Force a racket count into the allowed range. */

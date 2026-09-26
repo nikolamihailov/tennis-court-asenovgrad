@@ -33,7 +33,7 @@ export default async function BookingPage({ searchParams }: PageProps<"/booking"
       <header>
         <h1 className="text-2xl font-bold">Резервация на корт</h1>
         <p className="mt-1 text-white/60">
-          Избери дата и свободен час. Плащането е на място в клуба.
+          Избери дата, продължителност и свободен час. Плащането е на място в клуба.
         </p>
       </header>
 

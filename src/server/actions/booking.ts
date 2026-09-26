@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/dal";
 import { sendBookingConfirmation } from "@/lib/mail";
+import type { BookingDuration } from "@/lib/pricing";
 import { fieldErrors, guestBookingSchema, userBookingSchema } from "@/lib/validation";
 import { BookingError, createBooking, resolveGuestUser } from "@/server/bookings";
 
@@ -31,7 +32,8 @@ export async function createBookingAction(
   const raw = {
     courtId: formData.get("courtId"),
     date: formData.get("date"),
-    hour: formData.get("hour"),
+    startMinute: formData.get("startMinute"),
+    duration: formData.get("duration"),
     notes: formData.get("notes") || undefined,
     racketCount: formData.get("racketCount") ?? 0,
     lighting: formData.get("lighting"),
@@ -46,7 +48,8 @@ export async function createBookingAction(
   let slot: {
     courtId: string;
     date: string;
-    hour: number;
+    startMinute: number;
+    duration: BookingDuration;
     notes?: string;
     racketCount: number;
     lighting: boolean;

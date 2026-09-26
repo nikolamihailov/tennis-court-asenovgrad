@@ -2,15 +2,18 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, Loader2, MapPin, Sparkles } from "lucide-react";
+import { CalendarDays, Clock, Loader2, MapPin, Sparkles } from "lucide-react";
 
 import { createBookingAction, type BookingFormState } from "@/server/actions/booking";
 import {
+  BOOKING_DURATIONS,
   bookingTotal,
+  formatDuration,
   formatEur,
   LIGHTING_PRICE,
   MAX_RACKETS,
   RACKET_PRICE,
+  type BookingDuration,
 } from "@/lib/pricing";
 import { TextField } from "@/components/ui/Field";
 import type { CourtAvailability } from "@/server/availability";
@@ -30,7 +33,10 @@ type CurrentUser = {
 type Selection = {
   courtId: string;
   courtName: string;
-  hour: number;
+  start: number;
+  duration: BookingDuration;
+  /** "09:30 – 11:00" */
+  label: string;
   price: number;
   isIndoor: boolean;
 };
@@ -53,6 +59,7 @@ export default function BookingBoard({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [duration, setDuration] = useState<BookingDuration>(60);
   const [isRefreshing, startTransition] = useTransition();
   const [racketCount, setRacketCount] = useState(0);
   const [lighting, setLighting] = useState(false);
@@ -62,7 +69,7 @@ export default function BookingBoard({
 
   const total = selection
     ? bookingTotal({
-        pricePerHour: selection.price,
+        courtPrice: selection.price,
         racketCount,
         lighting,
         isIndoor: selection.isIndoor,
@@ -156,6 +163,30 @@ export default function BookingBoard({
               </FilterChip>
             ))}
           </div>
+
+          {/* Every length's slots are already loaded, so switching needs no round trip.
+              The slot list is different for each length, so a pick does not carry over. */}
+          <div className="flex w-full flex-wrap items-center gap-3 border-t border-white/5 pt-4">
+            <span className="flex items-center gap-2 text-sm text-white/60">
+              <Clock size={16} className="text-white/50" />
+              Продължителност
+            </span>
+            <div role="group" aria-label="Продължителност" className="flex flex-wrap gap-2">
+              {BOOKING_DURATIONS.map((option) => (
+                <FilterChip
+                  key={option}
+                  active={duration === option}
+                  onClick={() => {
+                    if (option === duration) return;
+                    setDuration(option);
+                    setSelection(null);
+                  }}
+                >
+                  {formatDuration(option)}
+                </FilterChip>
+              ))}
+            </div>
+          </div>
         </div>
 
         {availability.length === 0 && (
@@ -172,7 +203,8 @@ export default function BookingBoard({
             isRefreshing ? "pointer-events-none opacity-50" : ""
           }`}
         >
-          {availability.map(({ court, slots }) => {
+          {availability.map(({ court, slots: slotsByDuration }) => {
+            const slots = slotsByDuration[duration];
             const freeCount = slots.filter((slot) => slot.available).length;
 
             return (
@@ -195,8 +227,11 @@ export default function BookingBoard({
                     </div>
                   </div>
                   <p className="text-sm font-semibold">
-                    {formatEur(court.pricePerHour)}
-                    <span className="font-normal text-white/50"> / час</span>
+                    {formatEur(court.prices[duration])}
+                    <span className="font-normal text-white/50">
+                      {" "}
+                      / {formatDuration(duration)}
+                    </span>
                   </p>
                 </div>
 
@@ -208,11 +243,13 @@ export default function BookingBoard({
                   <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                     {slots.map((slot) => {
                       const isSelected =
-                        selection?.courtId === court.id && selection.hour === slot.hour;
+                        selection?.courtId === court.id &&
+                        selection.duration === duration &&
+                        selection.start === slot.start;
 
                       return (
                         <button
-                          key={slot.hour}
+                          key={slot.start}
                           type="button"
                           disabled={!slot.available}
                           aria-pressed={isSelected}
@@ -220,8 +257,10 @@ export default function BookingBoard({
                             setSelection({
                               courtId: court.id,
                               courtName: court.name,
-                              hour: slot.hour,
-                              price: court.pricePerHour,
+                              start: slot.start,
+                              duration,
+                              label: slot.label,
+                              price: court.prices[duration],
                               isIndoor: court.isIndoor,
                             });
                             // Lighting is not offered indoors, so a leftover tick from a
@@ -269,17 +308,14 @@ export default function BookingBoard({
             <form action={formAction} className="mt-4 space-y-4">
               <input type="hidden" name="courtId" value={selection.courtId} />
               <input type="hidden" name="date" value={date} />
-              <input type="hidden" name="hour" value={selection.hour} />
+              <input type="hidden" name="startMinute" value={selection.start} />
+              <input type="hidden" name="duration" value={selection.duration} />
 
               <dl className="space-y-1.5 rounded-lg bg-navy-900 p-4 text-sm">
                 <Row label="Корт" value={selection.courtName} />
                 <Row label="Дата" value={date} />
-                <Row
-                  label="Час"
-                  value={`${String(selection.hour).padStart(2, "0")}:00 – ${String(
-                    selection.hour + 1,
-                  ).padStart(2, "0")}:00`}
-                />
+                <Row label="Час" value={selection.label} />
+                <Row label="Продължителност" value={formatDuration(selection.duration)} />
               </dl>
 
               <div className="space-y-3 rounded-lg border border-white/10 bg-navy-900 p-4">
@@ -327,7 +363,10 @@ export default function BookingBoard({
               </div>
 
               <dl className="space-y-1.5 rounded-lg bg-navy-900 p-4 text-sm">
-                <Row label="Корт (1 час)" value={formatEur(selection.price)} />
+                <Row
+                  label={`Корт (${formatDuration(selection.duration)})`}
+                  value={formatEur(selection.price)}
+                />
                 {racketCount > 0 && (
                   <Row
                     label={`Ракети × ${racketCount}`}
@@ -409,12 +448,12 @@ export default function BookingBoard({
                 error={state.errors?.notes}
               />
 
-              {(state.message || state.errors?.hour || state.errors?.form) && (
+              {(state.message || state.errors?.startMinute || state.errors?.form) && (
                 <p
                   role="alert"
                   className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
                 >
-                  {state.message ?? state.errors?.hour ?? state.errors?.form}
+                  {state.message ?? state.errors?.startMinute ?? state.errors?.form}
                 </p>
               )}
 
