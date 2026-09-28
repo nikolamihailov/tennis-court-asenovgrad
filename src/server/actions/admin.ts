@@ -4,9 +4,24 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/dal";
-import { sendBookingCancellation } from "@/lib/mail";
-import { cancelBookingSchema, courtSchema, fieldErrors } from "@/lib/validation";
+import {
+  sendBookingCancellation,
+  sendTrainerSessionCancelled,
+  sendTrainerWelcome,
+} from "@/lib/mail";
+import {
+  cancelBookingSchema,
+  courtSchema,
+  fieldErrors,
+  trainerRateSchema,
+} from "@/lib/validation";
 import { BookingError, cancelBooking } from "@/server/bookings";
+import {
+  grantTrainerRole,
+  revokeTrainerRole,
+  setTrainerRate,
+  TrainerError,
+} from "@/server/trainers";
 
 export type AdminFormState = {
   errors?: Record<string, string>;
@@ -128,7 +143,7 @@ export async function cancelBookingAction(
       reason: parsed.data.reason,
       by: "CLUB",
     });
-    await sendBookingCancellation(booking);
+    await Promise.all([sendBookingCancellation(booking), sendTrainerSessionCancelled(booking)]);
   } catch (error) {
     if (error instanceof BookingError) return { message: error.message };
 
@@ -138,5 +153,81 @@ export async function cancelBookingAction(
 
   revalidatePath("/admin/bookings");
   revalidatePath("/admin");
+  revalidatePath("/trainer", "layout");
   return { ok: true, message: "Резервацията е отказана." };
+}
+
+// ---------------------------------------------------------------------------
+// Trainers
+// ---------------------------------------------------------------------------
+
+function revalidateTrainerViews() {
+  revalidatePath("/admin/users");
+  revalidatePath("/booking");
+  revalidatePath("/");
+}
+
+/** Make a registered user a trainer at the given hourly rate, and email them. */
+export async function grantTrainerAction(
+  _previous: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  await requireAdmin();
+
+  const parsed = trainerRateSchema.safeParse({
+    userId: formData.get("userId"),
+    hourlyRate: formData.get("hourlyRate"),
+  });
+  if (!parsed.success) return { errors: fieldErrors(parsed.error) };
+
+  try {
+    const user = await grantTrainerRole(parsed.data.userId, parsed.data.hourlyRate);
+    await sendTrainerWelcome(user);
+  } catch (error) {
+    if (error instanceof TrainerError) return { message: error.message };
+    console.error("[admin] grant trainer failed:", error);
+    return { message: "Възникна неочаквана грешка." };
+  }
+
+  revalidateTrainerViews();
+  return { ok: true, message: "Потребителят вече е треньор. Изпратихме му имейл." };
+}
+
+export async function setTrainerRateAction(
+  _previous: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  await requireAdmin();
+
+  const parsed = trainerRateSchema.safeParse({
+    userId: formData.get("userId"),
+    hourlyRate: formData.get("hourlyRate"),
+  });
+  if (!parsed.success) return { errors: fieldErrors(parsed.error) };
+
+  await setTrainerRate(parsed.data.userId, parsed.data.hourlyRate);
+
+  revalidateTrainerViews();
+  return { ok: true, message: "Ставката е запазена." };
+}
+
+export async function revokeTrainerAction(
+  _previous: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  await requireAdmin();
+
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { message: "Липсва потребител." };
+
+  try {
+    await revokeTrainerRole(userId);
+  } catch (error) {
+    if (error instanceof TrainerError) return { message: error.message };
+    console.error("[admin] revoke trainer failed:", error);
+    return { message: "Възникна неочаквана грешка." };
+  }
+
+  revalidateTrainerViews();
+  return { ok: true, message: "Ролята „треньор“ е премахната." };
 }

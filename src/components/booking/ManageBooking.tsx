@@ -10,7 +10,13 @@ import {
   rescheduleAction,
   type ManageFormState,
 } from "@/server/actions/manage";
-import { bookingTotal, formatDuration, formatEur, type BookingDuration } from "@/lib/pricing";
+import {
+  bookingTotal,
+  formatDuration,
+  formatEur,
+  trainerFeeFor,
+  type BookingDuration,
+} from "@/lib/pricing";
 import { CourtHeading, DurationPicker, SlotGrid } from "@/components/booking/SlotGrid";
 import type { CourtAvailability, Slot } from "@/server/availability";
 import type { BookingStatus } from "@/generated/prisma/enums";
@@ -23,6 +29,10 @@ type Summary = {
   racketCount: number;
   lighting: boolean;
   isIndoor: boolean;
+  /** The trainer booked with the court, if any. */
+  trainerName: string | null;
+  /** Their current hourly rate, which prices a moved session. Null without a trainer. */
+  trainerRate: number | null;
 };
 
 type Mode = "choose" | "reschedule" | "cancel";
@@ -46,6 +56,7 @@ export default function ManageBooking({
   maxDate,
   current,
   initialDuration,
+  unavailableMessage,
 }: {
   reference: string;
   token?: string;
@@ -61,6 +72,8 @@ export default function ManageBooking({
   /** Where the booking sits now, when `date` is its day. */
   current: { start: number; duration: BookingDuration } | null;
   initialDuration: BookingDuration;
+  /** Shown instead of the slots when the booking cannot be moved, e.g. its trainer left. */
+  unavailableMessage?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -124,6 +137,8 @@ export default function ManageBooking({
           racketCount: summary.racketCount,
           lighting: summary.lighting,
           isIndoor: summary.isIndoor,
+          trainerFee:
+            summary.trainerRate !== null ? trainerFeeFor(summary.trainerRate, duration) : 0,
         })
       : null;
 
@@ -182,7 +197,8 @@ export default function ManageBooking({
                 </section>
               ) : (
                 <p className="rounded-2xl border border-white/5 bg-navy-800 p-6 text-sm text-white/60">
-                  Кортът в момента не приема резервации. Моля, свържи се с клуба.
+                  {unavailableMessage ??
+                    "Кортът в момента не приема резервации. Моля, свържи се с клуба."}
                 </p>
               )}
             </div>
@@ -252,6 +268,7 @@ function CurrentBooking({ reference, summary }: { reference: string; summary: Su
         <Row label="Корт" value={summary.courtName} />
         <Row label="Дата" value={summary.dateLabel} />
         <Row label="Час" value={summary.timeLabel} />
+        {summary.trainerName && <Row label="Треньор" value={summary.trainerName} />}
         {summary.racketCount > 0 && (
           <Row label="Ракети" value={`${summary.racketCount} бр.`} />
         )}

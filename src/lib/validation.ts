@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isValidIsoDate } from "./time";
+import { isPlaceholderEmail } from "./contact";
 import { isBookingDuration, MAX_RACKETS, type BookingDuration } from "./pricing";
 
 const isoDate = z
@@ -31,11 +32,14 @@ const personName = z
   .min(2, { error: "Трябва да е поне 2 символа." })
   .max(60, { error: "Максимум 60 символа." });
 
+// Placeholder addresses stand in for students with no email (see src/lib/contact.ts).
+// Nobody may type one: registering with it would claim that student's booking history.
 const email = z
   .string()
   .trim()
   .toLowerCase()
-  .pipe(z.email({ error: "Невалиден имейл адрес." }));
+  .pipe(z.email({ error: "Невалиден имейл адрес." }))
+  .refine((value) => !isPlaceholderEmail(value), { error: "Невалиден имейл адрес." });
 
 // Bulgarian mobile numbers, with or without the +359 country code. Optional field.
 const phone = z
@@ -83,6 +87,13 @@ const bookingSlotSchema = z.object({
   lighting: z
     .union([z.string(), z.null(), z.undefined()])
     .transform((value) => value === "on" || value === "true"),
+
+  // Optional: most bookings are a court alone. Whether the id is a bookable trainer is
+  // checked against the database in createBooking().
+  trainerId: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((value) => (value ? value.trim() : ""))
+    .transform((value) => (value === "" ? undefined : value)),
 });
 
 /** A guest must identify themselves; there is no account to read the details from. */
@@ -203,6 +214,126 @@ export const rescheduleSchema = z.object({
   startMinute,
   duration,
 });
+
+// ---------------------------------------------------------------------------
+// Trainers
+// ---------------------------------------------------------------------------
+
+const hourlyRate = z.coerce
+  .number({ error: "Въведете ставка." })
+  .min(0, { error: "Ставката не може да е отрицателна." })
+  .max(1000, { error: "Ставката изглежда твърде висока." });
+
+/** Admin: grant the role, or change the rate of an existing trainer. */
+export const trainerRateSchema = z.object({
+  userId: z.string().trim().min(1),
+  hourlyRate,
+});
+
+/** A minute of the day on the 30-minute grid, 0..1440 inclusive (1440 = midnight after). */
+const gridMinute = z.coerce
+  .number()
+  .int()
+  .min(0)
+  .max(24 * 60)
+  .refine((value) => value % 30 === 0, { error: "Часовете са през 30 минути." });
+
+const workingWindow = z
+  .object({
+    weekday: z.coerce.number().int().min(1).max(7),
+    startMinute: gridMinute,
+    endMinute: gridMinute,
+  })
+  .refine((window) => window.endMinute > window.startMinute, {
+    error: "Краят трябва да е след началото.",
+  });
+
+/**
+ * The whole week from the hours editor, sent as one JSON field.
+ *
+ * Overlapping windows on the same day are refused rather than merged: they almost always
+ * mean a typo, and silently merging would save something other than what was typed.
+ */
+export const weeklyHoursSchema = z
+  .string()
+  .transform((raw, context) => {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      context.addIssue({ code: "custom", message: "Невалиден график." });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.array(workingWindow).max(35, { error: "Твърде много интервали." }))
+  .refine(
+    (windows) =>
+      windows.every((a, i) =>
+        windows.every(
+          (b, j) =>
+            i === j ||
+            a.weekday !== b.weekday ||
+            a.endMinute <= b.startMinute ||
+            b.endMinute <= a.startMinute,
+        ),
+      ),
+    { error: "Интервалите в един ден не трябва да се застъпват." },
+  );
+
+/** Time off: a date range, either whole days or from one time to another. */
+export const timeOffSchema = z
+  .object({
+    fromDate: isoDate,
+    toDate: isoDate,
+    allDay: z
+      .union([z.string(), z.null(), z.undefined()])
+      .transform((value) => value === "on" || value === "true"),
+    fromMinute: gridMinute.optional(),
+    toMinute: gridMinute.optional(),
+    reason: optionalText(200),
+  })
+  .refine((data) => data.toDate >= data.fromDate, {
+    error: "Крайната дата трябва да е след началната.",
+    path: ["toDate"],
+  })
+  .refine(
+    (data) =>
+      data.allDay ||
+      (data.fromMinute !== undefined &&
+        data.toMinute !== undefined &&
+        (data.toDate > data.fromDate || data.toMinute > data.fromMinute)),
+    { error: "Краят трябва да е след началото.", path: ["toMinute"] },
+  );
+
+export const trainerBioSchema = z.object({ bio: optionalText(600) });
+
+/**
+ * A trainer booking for a student who phoned them. The student may have no email, so
+ * either a phone or an email is enough — but one of them is required, or the club would
+ * have no way to reach them. The surname is optional: over the phone "Иван" is often all
+ * the trainer gets.
+ */
+export const trainerStudentBookingSchema = bookingSlotSchema
+  .omit({ trainerId: true })
+  .extend({
+    firstName: personName,
+    lastName: z
+      .string()
+      .trim()
+      .max(60, { error: "Максимум 60 символа." })
+      .transform((value) => (value === "" ? undefined : value))
+      .optional(),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .pipe(z.union([z.literal(""), email]))
+      .transform((value) => (value === "" ? undefined : value)),
+    phone,
+  })
+  .refine((data) => data.email || data.phone, {
+    error: "Въведете телефон или имейл на ученика.",
+    path: ["phone"],
+  });
 
 export type GuestBookingInput = z.infer<typeof guestBookingSchema>;
 export type UserBookingInput = z.infer<typeof userBookingSchema>;

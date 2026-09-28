@@ -183,6 +183,32 @@ export function addDaysToIsoDate(isoDate: string, days: number): string {
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
 }
 
+/**
+ * ISO weekday of a `YYYY-MM-DD` date: 1 = Monday … 7 = Sunday.
+ *
+ * A calendar date has the same weekday everywhere, so this is computed in UTC without
+ * any time zone math.
+ */
+export function isoWeekday(isoDate: string): number {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return weekday === 0 ? 7 : weekday;
+}
+
+/** Bulgarian weekday names, indexed by ISO weekday (index 0 unused). */
+export const WEEKDAY_NAMES = [
+  "",
+  "Понеделник",
+  "Вторник",
+  "Сряда",
+  "Четвъртък",
+  "Петък",
+  "Събота",
+  "Неделя",
+] as const;
+
+export const WEEKDAY_SHORT = ["", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"] as const;
+
 /** True when `isoDate` looks like a calendar date and is a real day. */
 export function isValidIsoDate(isoDate: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return false;

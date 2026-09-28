@@ -18,6 +18,7 @@ import {
 import { manageBookingPath } from "@/lib/url";
 import { BOOKING_HORIZON_DAYS, getAvailability } from "@/server/availability";
 import { authorizeBookingAccess } from "@/server/bookings";
+import { getActiveTrainer } from "@/server/trainers";
 
 export const metadata: Metadata = {
   title: "Промяна на резервация — Тенис клуб Асеновград",
@@ -55,14 +56,22 @@ export default async function ManageBookingPage({
         ? bookingDate
         : today;
 
+  // A session keeps its trainer when moved, so the trainer must still be taking sessions;
+  // their current rate prices the new length, as rescheduleBooking() will charge it.
+  const trainer = booking.trainer ? await getActiveTrainer(booking.trainer.id) : null;
+  const trainerGone = booking.trainer !== null && trainer === null;
+
   // Only this court — moving to another court is a new booking — and without this
-  // booking, so its own time reads as free and it can shift by half an hour.
-  const availability = booking.customerCanChange
-    ? await getAvailability(date, {
-        courtId: booking.court.id,
-        excludeBookingId: booking.id,
-      })
-    : [];
+  // booking, so its own time reads as free and it can shift by half an hour. With a
+  // trainer, only the times they can make.
+  const availability =
+    booking.customerCanChange && !trainerGone
+      ? await getAvailability(date, {
+          courtId: booking.court.id,
+          trainerId: trainer?.id,
+          excludeBookingId: booking.id,
+        })
+      : [];
 
   const { hour, minute } = clubDateParts(booking.startsAt);
   const currentDuration = isBookingDuration(booking.durationMinutes)
@@ -92,8 +101,18 @@ export default async function ManageBookingPage({
           racketCount: booking.racketCount,
           lighting: booking.lighting,
           isIndoor: booking.court.isIndoor,
+          trainerName: booking.trainer
+            ? [booking.trainer.firstName, booking.trainer.lastName].filter(Boolean).join(" ") ||
+              "Треньор"
+            : null,
+          trainerRate: trainer?.hourlyRate ?? null,
         }}
         court={availability[0] ?? null}
+        unavailableMessage={
+          trainerGone
+            ? "Треньорът вече не приема тренировки, затова часът не може да бъде преместен. Можеш да откажеш резервацията и да запишеш нова."
+            : undefined
+        }
         date={date}
         minDate={today}
         maxDate={maxDate}

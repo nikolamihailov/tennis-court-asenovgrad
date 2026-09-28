@@ -63,9 +63,13 @@ export default function Courts({ courts }: { courts: CourtDTO[] }) {
                   </span>
                 </div>
 
-                {court.description && (
-                  <p className="mt-3 text-sm text-white/50">{court.description}</p>
-                )}
+                {/* Always reserve one line so every card has the same height */}
+                <p
+                  className="mt-3 h-5 truncate text-sm text-white/50"
+                  title={court.description ?? undefined}
+                >
+                  {court.description}
+                </p>
 
                 <div className="mt-4 flex items-center justify-between">
                   <p className="font-semibold">

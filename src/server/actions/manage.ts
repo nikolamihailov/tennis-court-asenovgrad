@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/dal";
-import { sendBookingRescheduled, sendCustomerCancellation } from "@/lib/mail";
+import {
+  sendBookingRescheduled,
+  sendCustomerCancellation,
+  sendTrainerSessionCancelled,
+  sendTrainerSessionMoved,
+} from "@/lib/mail";
 import { absoluteUrl, bookingPath, manageBookingPath } from "@/lib/url";
 import {
   customerCancelSchema,
@@ -41,6 +46,7 @@ function revalidateBookingViews(reference: string) {
   revalidatePath("/profile");
   revalidatePath("/admin/bookings");
   revalidatePath("/admin");
+  revalidatePath("/trainer", "layout");
 }
 
 export async function customerCancelAction(
@@ -66,7 +72,10 @@ export async function customerCancelAction(
       reason: parsed.data.reason,
       by: "CUSTOMER",
     });
-    await sendCustomerCancellation(cancelled);
+    await Promise.all([
+      sendCustomerCancellation(cancelled),
+      sendTrainerSessionCancelled(cancelled),
+    ]);
   } catch (error) {
     if (error instanceof BookingError) return { message: error.message };
 
@@ -113,10 +122,13 @@ export async function rescheduleAction(
 
     // Awaited for the same reason as the booking confirmation: an un-awaited send can be
     // dropped when a serverless function freezes. Failures are swallowed inside.
-    await sendBookingRescheduled(
-      moved,
-      absoluteUrl(manageBookingPath(moved.reference, manageToken)),
-    );
+    await Promise.all([
+      sendBookingRescheduled(
+        moved,
+        absoluteUrl(manageBookingPath(moved.reference, manageToken)),
+      ),
+      sendTrainerSessionMoved(moved),
+    ]);
   } catch (error) {
     if (error instanceof BookingError) {
       return { errors: { [error.field]: error.message }, message: error.message };

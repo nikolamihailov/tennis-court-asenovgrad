@@ -16,8 +16,16 @@ const links: NavLink[] = [
   { href: "/#contact", label: "Контакти" },
 ];
 
+/** The staff area a role has, if any. Trainers and admins each get their own panel. */
+function staffPanel(role: string | undefined): { href: string; label: string } | null {
+  if (role === "ADMIN") return { href: "/admin", label: "Администрация" };
+  if (role === "TRAINER") return { href: "/trainer", label: "Треньорски панел" };
+  return null;
+}
+
 export default async function Navbar() {
   const user = await getCurrentUser();
+  const panel = staffPanel(user?.role);
 
   // Defined here rather than inside MobileMenu so the client component never imports
   // the auth module — it receives this as a prop and only knows how to submit it.
@@ -64,11 +72,11 @@ export default async function Navbar() {
               telling anyone anything they did not already know, and truncated to
               "Администра…" on narrower screens. title/aria-label carry the meaning. */}
           <div className="hidden items-center gap-2 lg:flex">
-            {user?.role === "ADMIN" && (
+            {panel && (
               <Link
-                href="/admin"
-                title="Администрация"
-                aria-label="Администрация"
+                href={panel.href}
+                title={panel.label}
+                aria-label={panel.label}
                 className="flex items-center rounded-lg border border-white/15 p-2.5 text-white/80 transition-colors hover:text-white"
               >
                 <LayoutDashboard size={16} />
@@ -120,7 +128,7 @@ export default async function Navbar() {
             user={
               user && {
                 label: user.firstName || user.email || "профил",
-                isAdmin: user.role === "ADMIN",
+                panel,
                 image: user.image,
                 firstName: user.firstName,
                 lastName: user.lastName,

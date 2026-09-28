@@ -7,6 +7,8 @@ import {
   Users,
 } from "lucide-react";
 
+import { displayEmail } from "@/lib/contact";
+import RoleBadge from "@/components/ui/RoleBadge";
 import { requireAdmin } from "@/lib/dal";
 import { formatClubDateShort, formatClubTime } from "@/lib/time";
 import { getAnalytics, type AnalyticsRange } from "@/server/analytics";
@@ -39,7 +41,10 @@ export default async function AdminDashboardPage({
     <div className="mx-auto max-w-7xl px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Табло</h1>
+          <h1 className="flex flex-wrap items-center gap-3 text-2xl font-bold">
+            Табло
+            <RoleBadge role="ADMIN" />
+          </h1>
           <p className="mt-1 text-white/60">
             Обобщение за последните {range} дни.
           </p>
@@ -181,7 +186,7 @@ export default async function AdminDashboardPage({
                     <p className="font-medium">
                       {[booking.user.firstName, booking.user.lastName]
                         .filter(Boolean)
-                        .join(" ") || booking.user.email}
+                        .join(" ") || displayEmail(booking.user.email)}
                     </p>
                     <p className="text-white/50">
                       {booking.court.name} · {formatClubDateShort(booking.startsAt)} ·{" "}

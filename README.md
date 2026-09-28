@@ -20,18 +20,19 @@ See [ROADMAP.md](./ROADMAP.md) for what shipped in each version and what was def
 ```
 prisma/
   schema.prisma         models + the Auth.js tables
-  migrations/           includes the hand-written overlap constraint
+  migrations/           includes the hand-written overlap constraints
   seed.ts               courts, and the first admin
 src/
   app/
     (site)/             public customer site
     admin/              staff panel, ADMIN role only
+    trainer/            trainer dashboard, TRAINER role only
     api/auth/           Auth.js route handler
-  components/           UI, split site / booking / admin
+  components/           UI, split site / booking / admin / trainer
   lib/                  db, dal (auth gates), mail, time, validation
   server/               domain services + Server Actions
   auth.ts               Auth.js config
-  proxy.ts              optimistic /admin gate (Next 16's Middleware)
+  proxy.ts              optimistic /admin and /trainer gate (Next 16's Middleware)
 ```
 
 Two audiences, one app. The customer site and the admin panel share the Prisma client,
@@ -93,6 +94,27 @@ Access is checked in two places, and both matter:
 - `requireAdmin()` in `src/lib/dal.ts` is the real gate, called by every admin page and
   every Server Action. Server Actions accept direct POSTs that never render a page, so
   they cannot rely on the proxy or the layout.
+
+## Trainers
+
+A trainer is a registered customer account that an admin promotes from **Потребители →
+Направи треньор**, setting an hourly rate. They get an email, and on their next sign-in
+land on `/trainer`, where they:
+
+- set weekly working hours and block out time off (**График**),
+- see the next seven days of sessions and free time (**Табло**),
+- list and cancel their sessions (**Тренировки**) — cancelling cancels the whole
+  booking, court included, and emails the customer.
+
+Customers pick a trainer on the booking page; the slot grid then shows only times when
+both the court and the trainer are free, and the trainer's fee (rate × length) is added
+to the total. A second exclusion constraint, `Booking_trainer_no_overlap`, stops a
+trainer being double-booked across courts, the same way `Booking_no_overlap` guards a
+court.
+
+`requireTrainer()` re-reads the role from the database on every request rather than
+trusting the session, so revoking the role takes effect immediately. Revoking is refused
+while the trainer still has upcoming sessions.
 
 ## Deployment
 

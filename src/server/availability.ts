@@ -11,6 +11,7 @@ import {
   toClubIsoDate,
 } from "@/lib/time";
 import { listActiveCourts, type CourtDTO } from "./courts";
+import { loadTrainerDay, type TrainerDay } from "./trainers";
 
 /** How far ahead customers may book. */
 export const BOOKING_HORIZON_DAYS = 60;
@@ -28,8 +29,11 @@ export type Slot = {
   /** "09:30 – 11:00", club-local. */
   label: string;
   available: boolean;
-  /** Why the slot cannot be booked. `null` when it can. */
-  reason: "booked" | "past" | null;
+  /**
+   * Why the slot cannot be booked. `null` when it can. "trainer" means the court is free
+   * but the chosen trainer is not — in another session or on time off.
+   */
+  reason: "booked" | "past" | "trainer" | null;
 };
 
 export type CourtAvailability = {
@@ -61,6 +65,11 @@ function minuteOfDayOn(isoDate: string, instant: Date): number | null {
  * Offering every half hour instead would double the number of buttons and invite
  * bookings that strand 30 minutes between two games.
  *
+ * With a `trainer`, only starts inside the trainer's working windows are offered at all
+ * — a trainer who works 16:00–20:00 should not fill the grid with a morning of struck-out
+ * buttons — and the ones inside a window but clashing with a session or time off are
+ * shown as unavailable, the same way a booked court is.
+ *
  * This is the single definition of a bookable slot: createBooking() rejects any start
  * this function does not return as available, so a hand-crafted request cannot book an
  * off-grid time.
@@ -70,32 +79,41 @@ export function buildSlots({
   isoDate,
   duration,
   bookings,
+  trainer,
   now,
 }: {
   court: Pick<CourtDTO, "openingHour" | "closingHour">;
   isoDate: string;
   duration: BookingDuration;
   bookings: BookedInterval[];
+  trainer?: TrainerDay;
   now: Date;
 }): Slot[] {
   const open = court.openingHour * 60;
   const lastStart = court.closingHour * 60 - duration;
   if (lastStart < open) return [];
 
+  const overlapsAny = (intervals: BookedInterval[], startsAt: number, endsAt: number) =>
+    intervals.some(
+      (interval) =>
+        interval.startsAt.getTime() < endsAt && interval.endsAt.getTime() > startsAt,
+    );
+
+  const withinTrainerHours = (start: number) =>
+    !trainer ||
+    trainer.windows.some((window) => start >= window.start && start + duration <= window.end);
+
   const evaluate = (start: number): Slot => {
     const startsAt = clubDateMinuteToUtc(isoDate, start).getTime();
     const endsAt = startsAt + duration * 60_000;
 
-    const overlaps = bookings.some(
-      (booking) =>
-        booking.startsAt.getTime() < endsAt && booking.endsAt.getTime() > startsAt,
-    );
-
-    const reason = overlaps
+    const reason = overlapsAny(bookings, startsAt, endsAt)
       ? ("booked" as const)
-      : startsAt <= now.getTime()
-        ? ("past" as const)
-        : null;
+      : trainer && overlapsAny(trainer.busy, startsAt, endsAt)
+        ? ("trainer" as const)
+        : startsAt <= now.getTime()
+          ? ("past" as const)
+          : null;
 
     return {
       start,
@@ -108,11 +126,11 @@ export function buildSlots({
 
   const slots: Slot[] = [];
   for (let start = open; start <= lastStart; start += 60) {
-    slots.push(evaluate(start));
+    if (withinTrainerHours(start)) slots.push(evaluate(start));
   }
 
   const gapStarts = new Set<number>([lastStart]);
-  for (const booking of bookings) {
+  for (const booking of [...bookings, ...(trainer?.busy ?? [])]) {
     const end = minuteOfDayOn(isoDate, booking.endsAt);
     if (end !== null) gapStarts.add(end);
 
@@ -120,10 +138,17 @@ export function buildSlots({
     if (begin !== null) gapStarts.add(begin - duration);
   }
 
+  // A window that opens or closes on the half hour would otherwise lose that half hour.
+  for (const window of trainer?.windows ?? []) {
+    gapStarts.add(window.start);
+    gapStarts.add(window.end - duration);
+  }
+
   for (const start of gapStarts) {
     // Full hours are already listed; anything off the grid is not a start we offer.
     if (start % 60 === 0 || start % SLOT_STEP_MINUTES !== 0) continue;
     if (start < open || start > lastStart) continue;
+    if (!withinTrainerHours(start)) continue;
 
     const slot = evaluate(start);
     if (slot.available) slots.push(slot);
@@ -183,7 +208,15 @@ export async function loadDayBookings(
  */
 export async function getAvailability(
   isoDate: string,
-  options: { courtId?: string; now?: Date; excludeBookingId?: string } = {},
+  options: {
+    courtId?: string;
+    /** Limit slots to when this trainer can take a session. Must be a bookable trainer. */
+    trainerId?: string;
+    /** Ignore the trainer's weekly hours: the trainer is booking a student themselves. */
+    trainerAnyHours?: boolean;
+    now?: Date;
+    excludeBookingId?: string;
+  } = {},
 ): Promise<CourtAvailability[]> {
   const now = options.now ?? new Date();
 
@@ -194,11 +227,20 @@ export async function getAvailability(
 
   if (courts.length === 0) return [];
 
-  const bookingsByCourt = await loadDayBookings(
-    courts.map((court) => court.id),
-    isoDate,
-    options.excludeBookingId,
-  );
+  // The trainer's day is loaded once: they are one person across every court.
+  const [bookingsByCourt, trainer] = await Promise.all([
+    loadDayBookings(
+      courts.map((court) => court.id),
+      isoDate,
+      options.excludeBookingId,
+    ),
+    options.trainerId
+      ? loadTrainerDay(options.trainerId, isoDate, {
+          excludeBookingId: options.excludeBookingId,
+          anyHours: options.trainerAnyHours,
+        })
+      : Promise.resolve(undefined),
+  ]);
 
   return courts.map((court) => {
     const bookings = bookingsByCourt.get(court.id) ?? [];
@@ -206,7 +248,7 @@ export async function getAvailability(
     const slots = Object.fromEntries(
       BOOKING_DURATIONS.map((duration) => [
         duration,
-        buildSlots({ court, isoDate, duration, bookings, now }),
+        buildSlots({ court, isoDate, duration, bookings, trainer, now }),
       ]),
     ) as Record<BookingDuration, Slot[]>;
 

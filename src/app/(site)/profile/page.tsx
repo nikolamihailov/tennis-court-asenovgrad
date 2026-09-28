@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import ProfileForm from "@/components/account/ProfileForm";
 import Avatar from "@/components/ui/Avatar";
+import RoleBadge from "@/components/ui/RoleBadge";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/dal";
 import { formatEur } from "@/lib/pricing";
@@ -29,6 +30,7 @@ export default async function ProfilePage() {
         lastName: true,
         phone: true,
         image: true,
+        role: true,
         createdAt: true,
         accounts: { select: { provider: true } },
       },
@@ -41,7 +43,10 @@ export default async function ProfilePage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
       <header>
-        <h1 className="text-2xl font-bold">Моят профил</h1>
+        <h1 className="flex flex-wrap items-center gap-3 text-2xl font-bold">
+          Моят профил
+          <RoleBadge role={account.role} />
+        </h1>
         <p className="mt-1 text-white/60">
           Данните ти и всички резервации на едно място.
         </p>
@@ -137,7 +142,17 @@ function Section({
               className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/5 bg-navy-800 p-5"
             >
               <div>
-                <p className="font-semibold">{booking.court.name}</p>
+                <p className="font-semibold">
+                  {booking.court.name}
+                  {booking.trainer && (
+                    <span className="ml-2 text-sm font-normal text-brand-400">
+                      · с{" "}
+                      {[booking.trainer.firstName, booking.trainer.lastName]
+                        .filter(Boolean)
+                        .join(" ") || "треньор"}
+                    </span>
+                  )}
+                </p>
                 <p className="mt-0.5 text-sm text-white/60">
                   {formatClubWeekday(booking.startsAt)},{" "}
                   {formatClubDateLong(booking.startsAt)} ·{" "}

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/dal";
-import { sendBookingConfirmation } from "@/lib/mail";
+import { sendBookingConfirmation, sendTrainerNewSession } from "@/lib/mail";
 import { absoluteUrl, bookingPath, manageBookingPath } from "@/lib/url";
 import type { BookingDuration } from "@/lib/pricing";
 import { fieldErrors, guestBookingSchema, userBookingSchema } from "@/lib/validation";
@@ -38,6 +38,7 @@ export async function createBookingAction(
     notes: formData.get("notes") || undefined,
     racketCount: formData.get("racketCount") ?? 0,
     lighting: formData.get("lighting"),
+    trainerId: formData.get("trainerId"),
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),
     email: formData.get("email"),
@@ -54,6 +55,7 @@ export async function createBookingAction(
     notes?: string;
     racketCount: number;
     lighting: boolean;
+    trainerId?: string;
   };
 
   if (currentUser) {
@@ -103,10 +105,13 @@ export async function createBookingAction(
     // the moment the response is sent, which would drop an un-awaited send. Delivery
     // failures are swallowed inside sendBookingConfirmation — the booking is already
     // committed and must not be reported as failed because email was down.
-    await sendBookingConfirmation(
-      booking,
-      absoluteUrl(manageBookingPath(booking.reference, manageToken)),
-    );
+    await Promise.all([
+      sendBookingConfirmation(
+        booking,
+        absoluteUrl(manageBookingPath(booking.reference, manageToken)),
+      ),
+      sendTrainerNewSession(booking),
+    ]);
   } catch (error) {
     if (error instanceof BookingError) {
       return { errors: { [error.field]: error.message }, message: error.message };
@@ -119,6 +124,7 @@ export async function createBookingAction(
   }
 
   revalidatePath("/booking");
+  revalidatePath("/trainer", "layout");
   // With the token, so a guest — who has no session — still sees their own details.
   redirect(bookingPath(reference, { token }));
 }

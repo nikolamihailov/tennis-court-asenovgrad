@@ -96,9 +96,11 @@ export function SlotGrid({
                 ? "Текущият час на резервацията"
                 : slot.reason === "booked"
                   ? "Часът е зает"
-                  : slot.reason === "past"
-                    ? "Часът вече е минал"
-                    : undefined
+                  : slot.reason === "trainer"
+                    ? "Треньорът е зает в този час"
+                    : slot.reason === "past"
+                      ? "Часът вече е минал"
+                      : undefined
             }
             className={[
               "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
