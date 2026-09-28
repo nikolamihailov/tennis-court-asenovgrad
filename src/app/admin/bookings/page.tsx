@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import Badge from "@/components/admin/Badge";
 import CancelBookingButton from "@/components/admin/CancelBookingButton";
+import { displayEmail } from "@/lib/contact";
 import { requireAdmin } from "@/lib/dal";
 import { formatClubDateShort, formatClubTime, formatClubWeekday } from "@/lib/time";
 import { listBookings } from "@/server/bookings";
@@ -149,7 +150,9 @@ export default async function AdminBookingsPage({
                         .filter(Boolean)
                         .join(" ") || "—"}
                     </p>
-                    <p className="text-xs text-white/45">{booking.user.email}</p>
+                    {displayEmail(booking.user.email) && (
+                      <p className="text-xs text-white/45">{booking.user.email}</p>
+                    )}
                     {booking.user.phone && (
                       <p className="text-xs text-white/35">{booking.user.phone}</p>
                     )}
@@ -158,9 +161,22 @@ export default async function AdminBookingsPage({
                     {/* How this booking was made, not what the account is today: someone
                         who checked out as a guest and registered later still made this
                         one as a guest. */}
-                    <Badge>{booking.bookedAsGuest ? "гост" : "регистриран"}</Badge>
+                    {booking.bookedByTrainer ? (
+                      <Badge tone="brand">от треньора</Badge>
+                    ) : (
+                      <Badge>{booking.bookedAsGuest ? "гост" : "регистриран"}</Badge>
+                    )}
                   </td>
-                  <td className="px-5 py-3 text-white/70">{booking.court.name}</td>
+                  <td className="px-5 py-3 text-white/70">
+                    <p>{booking.court.name}</p>
+                    {booking.trainer && (
+                      <p className="mt-0.5 text-xs text-brand-400/80">
+                        с {[booking.trainer.firstName, booking.trainer.lastName]
+                          .filter(Boolean)
+                          .join(" ") || booking.trainer.email}
+                      </p>
+                    )}
+                  </td>
                   <td className="px-5 py-3">
                     <p>{formatClubDateShort(booking.startsAt)}</p>
                     <p className="text-xs text-white/45">
@@ -182,7 +198,11 @@ export default async function AdminBookingsPage({
                         {/* Who cancelled matters to staff: a customer freeing the court is
                             routine, the club cancelling is something they did themselves. */}
                         <p className="mt-1 text-xs text-white/45">
-                          {booking.cancelledBy === "CUSTOMER" ? "от клиента" : "от клуба"}
+                          {booking.cancelledBy === "CUSTOMER"
+                            ? "от клиента"
+                            : booking.cancelledBy === "TRAINER"
+                              ? "от треньора"
+                              : "от клуба"}
                         </p>
                         {booking.cancellationReason && (
                           <p

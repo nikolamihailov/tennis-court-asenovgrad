@@ -14,9 +14,11 @@ datasource db {
   provider = "postgresql"
 }
 
+/// TRAINER is granted by an admin to an existing registered account; nobody signs up as one.
 enum Role {
   USER
   ADMIN
+  TRAINER
 }
 
 enum CourtSurface {
@@ -34,6 +36,7 @@ enum BookingStatus {
 enum CancelledBy {
   CUSTOMER
   CLUB
+  TRAINER
 }
 
 /// One row per person, whether or not they ever sign in.
@@ -69,6 +72,9 @@ model User {
   accounts Account[]
   sessions Session[]
   bookings Booking[]
+
+  trainerProfile   TrainerProfile?
+  trainingBookings Booking[]        @relation("TrainerBookings")
 
   @@index([role])
   @@index([createdAt])
@@ -145,16 +151,90 @@ model Booking {
   /// Set when the customer moved the booking to another time.
   rescheduledAt DateTime?
 
+  /// The trainer booked along with the court, if any. A trainer cannot be in two places at
+  /// once: the `Booking_trainer_no_overlap` exclusion constraint (raw SQL, like the court
+  /// one) rejects overlapping CONFIRMED bookings for the same trainer.
+  trainerId String?
+
+  /// The trainer's fee included in `totalPrice`, stored for the same reason as the total:
+  /// a later change to the trainer's rate must not rewrite what was charged.
+  trainerFee Decimal? @db.Decimal(10, 2)
+
+  /// True when the trainer entered the booking for a student — typically someone who
+  /// phoned them and has no account or no internet. Such a student may have no email; see
+  /// src/lib/contact.ts for how that is stored.
+  bookedByTrainer Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  court Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  court   Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  user    User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trainer User? @relation("TrainerBookings", fields: [trainerId], references: [id], onDelete: Restrict)
 
+  @@index([trainerId, startsAt])
   @@index([courtId, startsAt])
   @@index([userId, startsAt])
   @@index([startsAt])
   @@index([status, startsAt])
+}
+
+/// Trainer-specific data, for a User whose role is TRAINER.
+///
+/// Kept when the role is revoked (with `isActive = false`) so that re-granting it later
+/// restores the trainer's hours and bio instead of starting from nothing, and so past
+/// bookings still point at a trainer with a name.
+model TrainerProfile {
+  userId String @id
+
+  /// Shown to customers on the booking page. Written by the trainer.
+  bio String?
+
+  /// Fee per hour of training, in euro, on top of the court price. Set by the admin.
+  /// A 90-minute session costs 1.5 × this.
+  hourlyRate Decimal @db.Decimal(10, 2)
+
+  /// False once the role is revoked: hidden from customers and not bookable.
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hours    TrainerWorkingHours[]
+  timeOffs TrainerTimeOff[]
+}
+
+/// One weekly window when a trainer takes sessions, e.g. Monday 16:00–20:00. A day can
+/// have several windows (a lunch break is two). Europe/Sofia local time, like court hours.
+model TrainerWorkingHours {
+  id          String @id @default(cuid())
+  trainerId   String
+  /// ISO weekday: 1 = Monday … 7 = Sunday.
+  weekday     Int
+  /// Minutes since club-local midnight, on the 30-minute grid.
+  startMinute Int
+  endMinute   Int
+
+  trainer TrainerProfile @relation(fields: [trainerId], references: [userId], onDelete: Cascade)
+
+  @@index([trainerId, weekday])
+}
+
+/// A block when the trainer is unavailable despite their weekly hours: holiday, illness,
+/// a tournament. Stored as instants so a multi-day absence is one row.
+model TrainerTimeOff {
+  id        String   @id @default(cuid())
+  trainerId String
+  startsAt  DateTime @db.Timestamptz(3)
+  endsAt    DateTime @db.Timestamptz(3)
+  reason    String?
+
+  createdAt DateTime @default(now())
+
+  trainer TrainerProfile @relation(fields: [trainerId], references: [userId], onDelete: Cascade)
+
+  @@index([trainerId, startsAt])
 }
 
 // ---------------------------------------------------------------------------

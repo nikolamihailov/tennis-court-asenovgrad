@@ -19,7 +19,8 @@ export type NavLink = { href: string; label: string };
 
 export type MenuUser = {
   label: string;
-  isAdmin: boolean;
+  /** The staff dashboard this person has — admin or trainer — if any. */
+  panel: { href: string; label: string } | null;
   image: string | null;
   firstName: string | null;
   lastName: string | null;
@@ -141,13 +142,13 @@ export default function MobileMenu({
               <div className="space-y-2 py-4">
                 {user ? (
                   <>
-                    {user.isAdmin && (
+                    {user.panel && (
                       <MenuAction
-                        href="/admin"
+                        href={user.panel.href}
                         icon={<LayoutDashboard size={16} />}
                         onClick={close}
                       >
-                        Администрация
+                        {user.panel.label}
                       </MenuAction>
                     )}
 

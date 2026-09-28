@@ -12,15 +12,15 @@ import { cancelBookingAction, type AdminFormState } from "@/server/actions/admin
 export default function CancelBookingButton({
   bookingId,
   reference,
+  action = cancelBookingAction,
 }: {
   bookingId: string;
   reference: string;
+  /** Defaults to the admin action; the trainer panel passes its own, same signature. */
+  action?: (previous: AdminFormState, formData: FormData) => Promise<AdminFormState>;
 }) {
   const [open, setOpen] = useState(false);
-  const [state, formAction, pending] = useActionState<AdminFormState, FormData>(
-    cancelBookingAction,
-    {},
-  );
+  const [state, formAction, pending] = useActionState<AdminFormState, FormData>(action, {});
 
   if (state.ok) {
     return <span className="text-xs text-white/40">Отказана</span>;

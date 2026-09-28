@@ -4,6 +4,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { db } from "@/lib/db";
 import type { Role } from "@/generated/prisma/enums";
 
 export type SessionUser = {
@@ -66,6 +67,31 @@ export async function requireAdmin(): Promise<SessionUser> {
   if (user.role !== "ADMIN") redirect("/login?error=forbidden");
 
   return user;
+}
+
+/**
+ * The trainer gate, for every /trainer page and trainer Server Action.
+ *
+ * Unlike requireAdmin(), this re-reads the role from the database instead of trusting the
+ * session. The JWT's copy can be up to five minutes stale, and a trainer whose role was
+ * just revoked must not keep cancelling customers' sessions in that window. It costs one
+ * indexed lookup per request in a section only a handful of people use.
+ */
+export async function requireTrainer(): Promise<SessionUser> {
+  const user = await getCurrentUser();
+
+  if (!user) redirect("/login?callbackUrl=%2Ftrainer");
+
+  const row = await db.user.findUnique({
+    where: { id: user.id },
+    select: { role: true, trainerProfile: { select: { isActive: true } } },
+  });
+
+  if (row?.role !== "TRAINER" || !row.trainerProfile?.isActive) {
+    redirect("/login?error=forbidden");
+  }
+
+  return { ...user, role: "TRAINER" };
 }
 
 /** Non-redirecting variant, for deciding whether to render an admin-only link. */

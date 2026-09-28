@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default async function RegisterPage({ searchParams }: PageProps<"/register">) {
   const params = await searchParams;
-  const callbackUrl = safeCallbackUrl(params.callbackUrl, "/profile");
+  const callbackUrl = safeCallbackUrl(params.callbackUrl, "/account");
 
   if (await getCurrentUser()) redirect(callbackUrl);
 

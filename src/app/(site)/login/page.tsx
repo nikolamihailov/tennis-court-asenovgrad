@@ -22,7 +22,7 @@ export const metadata: Metadata = {
  * is only visible in the server logs.
  */
 const ERROR_MESSAGES: Record<string, string> = {
-  forbidden: "Нямаш достъп до администраторския панел с този профил.",
+  forbidden: "Нямаш достъп до тази част на сайта с този профил.",
   CredentialsSignin: "Грешен имейл или парола.",
   OAuthAccountNotLinked: "Този имейл вече се използва с друг метод за вход.",
   AccessDenied: "Входът беше отказан.",
@@ -32,9 +32,10 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const params = await searchParams;
-  // Falls back to the profile rather than the home page: someone who chose to sign in
+  // Falls back to /account, which sends trainers to their dashboard and everyone else to
+  // their profile, rather than the home page: someone who chose to sign in
   // wants their account, and landing back on the marketing page looks like it failed.
-  const callbackUrl = safeCallbackUrl(params.callbackUrl, "/profile");
+  const callbackUrl = safeCallbackUrl(params.callbackUrl, "/account");
   const error = typeof params.error === "string" ? params.error : undefined;
 
   const user = await getCurrentUser();

@@ -91,6 +91,15 @@ export default async function BookingConfirmationPage({
             label="Час"
             value={`${formatClubTime(booking.startsAt)} – ${formatClubTime(booking.endsAt)}`}
           />
+          {booking.trainer && (
+            <Row
+              label="Треньор"
+              value={
+                [booking.trainer.firstName, booking.trainer.lastName].filter(Boolean).join(" ") ||
+                "Треньор"
+              }
+            />
+          )}
           {showPrivate && (
             <>
               {booking.racketCount > 0 && (

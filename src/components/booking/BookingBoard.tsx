@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, Loader2 } from "lucide-react";
+import { CalendarDays, Loader2, UserRoundX } from "lucide-react";
 
 import { createBookingAction, type BookingFormState } from "@/server/actions/booking";
 import {
@@ -12,6 +12,7 @@ import {
   LIGHTING_PRICE,
   MAX_RACKETS,
   RACKET_PRICE,
+  trainerFeeFor,
   type BookingDuration,
 } from "@/lib/pricing";
 import { TextField } from "@/components/ui/Field";
@@ -21,7 +22,11 @@ import {
   FilterChip,
   SlotGrid,
 } from "@/components/booking/SlotGrid";
+import TrainerPicker, { trainerHoursOn } from "@/components/booking/TrainerPicker";
+import Avatar from "@/components/ui/Avatar";
+import { WEEKDAY_SHORT } from "@/lib/time";
 import type { CourtAvailability } from "@/server/availability";
+import type { TrainerDTO } from "@/server/trainers";
 
 type CurrentUser = {
   firstName: string | null;
@@ -47,15 +52,34 @@ export default function BookingBoard({
   minDate,
   maxDate,
   selectedCourtId,
+  trainers = [],
+  selectedTrainerId,
   currentUser,
+  mode = "customer",
+  basePath = "/booking",
+  action = createBookingAction,
 }: {
   availability: CourtAvailability[];
   date: string;
   minDate: string;
   maxDate: string;
   selectedCourtId?: string;
+  /** Bookable trainers. The picker is hidden when there are none. */
+  trainers?: TrainerDTO[];
+  /** The trainer the slots were computed for, from the URL. */
+  selectedTrainerId?: string;
   currentUser?: CurrentUser | null;
+  /**
+   * "trainer" is the trainer booking for a student from their panel: no trainer picker
+   * (it is always them), the form asks for the student instead of the signed-in person,
+   * and the trainer's weekly hours do not hide any slots.
+   */
+  mode?: "customer" | "trainer";
+  /** Where date/court changes navigate to. */
+  basePath?: string;
+  action?: (previous: BookingFormState, formData: FormData) => Promise<BookingFormState>;
 }) {
+  const isTrainerMode = mode === "trainer";
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -64,8 +88,16 @@ export default function BookingBoard({
   const [racketCount, setRacketCount] = useState(0);
   const [lighting, setLighting] = useState(false);
 
+  const trainer = trainers.find((candidate) => candidate.id === selectedTrainerId);
+  const trainerWorksToday =
+    isTrainerMode || !trainer ? true : trainerHoursOn(trainer, date) !== null;
+
   // Lighting is only sold on outdoor courts; the indoor one is lit anyway.
   const canAddLighting = selection ? !selection.isIndoor : false;
+
+  // A preview only: the server recomputes the fee from the trainer's current rate.
+  const trainerFee =
+    selection && trainer ? trainerFeeFor(trainer.hourlyRate, selection.duration) : 0;
 
   const total = selection
     ? bookingTotal({
@@ -73,11 +105,12 @@ export default function BookingBoard({
         racketCount,
         lighting,
         isIndoor: selection.isIndoor,
+        trainerFee,
       })
     : 0;
 
   const [state, formAction, pending] = useActionState<BookingFormState, FormData>(
-    createBookingAction,
+    action,
     {},
   );
 
@@ -103,12 +136,20 @@ export default function BookingBoard({
     });
   }, [selection]);
 
-  function updateQuery(next: { date?: string; courtId?: string | null }) {
+  function updateQuery(next: {
+    date?: string;
+    courtId?: string | null;
+    trainerId?: string | null;
+  }) {
     const params = new URLSearchParams(searchParams.toString());
 
     if (next.date) params.set("date", next.date);
     if (next.courtId === null) params.delete("courtId");
     else if (next.courtId) params.set("courtId", next.courtId);
+    // The trainer changes which slots exist, so it lives in the URL and the server
+    // recomputes availability for them — like the date, unlike the duration.
+    if (next.trainerId === null) params.delete("trainerId");
+    else if (next.trainerId) params.set("trainerId", next.trainerId);
 
     // Changing the day invalidates a slot chosen on the previous day.
     setSelection(null);
@@ -118,7 +159,7 @@ export default function BookingBoard({
     // being mounted, and this is the same route with different search params, so without
     // a pending state the old availability would sit there looking current.
     startTransition(() => {
-      router.push(`/booking?${params.toString()}`);
+      router.push(`${basePath}?${params.toString()}`);
     });
   }
 
@@ -175,10 +216,50 @@ export default function BookingBoard({
           />
         </div>
 
+        {trainers.length > 0 && !isTrainerMode && (
+          <div
+            className={`transition-opacity ${isRefreshing ? "pointer-events-none opacity-50" : ""}`}
+          >
+            <TrainerPicker
+              trainers={trainers}
+              selectedId={trainer?.id}
+              date={date}
+              onSelect={(trainerId) => updateQuery({ trainerId })}
+            />
+          </div>
+        )}
+
         {availability.length === 0 && (
           <p className="mt-6 rounded-2xl border border-white/5 bg-navy-800 p-6 text-white/60">
             Няма налични кортове за избраната дата.
           </p>
+        )}
+
+        {/* On the trainer's day off every court would say "no free slots"; one clear
+            message with the days they do work is more useful than three empty grids. */}
+        {trainer && !trainerWorksToday && availability.length > 0 && (
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/5 bg-navy-800 p-6 sm:flex-row sm:items-center">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/5 text-white/50">
+              <UserRoundX size={20} />
+            </span>
+            <div className="flex-1 text-sm">
+              <p className="font-medium">{trainer.name} не работи на тази дата.</p>
+              <p className="mt-0.5 text-white/50">
+                {trainer.hours.length > 0
+                  ? `Работни дни: ${[...new Set(trainer.hours.map((h) => h.weekday))]
+                      .map((day) => WEEKDAY_SHORT[day])
+                      .join(", ")}. Избери друга дата или друг треньор.`
+                  : "Треньорът все още няма работни часове. Избери друг треньор."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateQuery({ trainerId: null })}
+              className="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white/80 transition-colors hover:text-white"
+            >
+              Без треньор
+            </button>
+          </div>
         )}
 
         {/* Dimmed and inert while the new day loads, so the slots on screen are never
@@ -187,7 +268,7 @@ export default function BookingBoard({
           aria-busy={isRefreshing}
           className={`mt-6 space-y-6 transition-opacity ${
             isRefreshing ? "pointer-events-none opacity-50" : ""
-          }`}
+          } ${trainer && !trainerWorksToday ? "hidden" : ""}`}
         >
           {availability.map(({ court, slots }) => (
             <section
@@ -238,6 +319,9 @@ export default function BookingBoard({
               <input type="hidden" name="date" value={date} />
               <input type="hidden" name="startMinute" value={selection.start} />
               <input type="hidden" name="duration" value={selection.duration} />
+              {trainer && !isTrainerMode && (
+                <input type="hidden" name="trainerId" value={trainer.id} />
+              )}
 
               <dl className="space-y-1.5 rounded-lg bg-navy-900 p-4 text-sm">
                 <Row label="Корт" value={selection.courtName} />
@@ -245,6 +329,22 @@ export default function BookingBoard({
                 <Row label="Час" value={selection.label} />
                 <Row label="Продължителност" value={formatDuration(selection.duration)} />
               </dl>
+
+              {trainer && !isTrainerMode && (
+                <div className="flex items-center gap-3 rounded-lg border border-brand-500/20 bg-navy-900 p-3 text-sm">
+                  <Avatar
+                    src={trainer.image}
+                    firstName={trainer.firstName}
+                    lastName={trainer.lastName}
+                    email={null}
+                    size={36}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs text-white/50">Тренировка с</p>
+                    <p className="truncate font-medium">{trainer.name}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-3 rounded-lg border border-white/10 bg-navy-900 p-4">
                 <p className="text-xs uppercase tracking-wide text-white/40">Допълнително</p>
@@ -304,12 +404,20 @@ export default function BookingBoard({
                 {lighting && canAddLighting && (
                   <Row label="Осветление" value={formatEur(LIGHTING_PRICE)} />
                 )}
+                {trainer && (
+                  <Row
+                    label={`Треньор (${formatDuration(selection.duration)})`}
+                    value={formatEur(trainerFee)}
+                  />
+                )}
                 <div className="mt-1 border-t border-white/10 pt-2">
                   <Row label="Общо" value={formatEur(total)} strong />
                 </div>
               </dl>
 
-              {currentUser ? (
+              {isTrainerMode ? (
+                <StudentFields errors={state.errors} />
+              ) : currentUser ? (
                 <div className="rounded-lg border border-white/10 bg-navy-900 p-4 text-sm">
                   <p className="text-white/60">Резервираш като</p>
                   <p className="mt-0.5 font-medium">
@@ -391,12 +499,62 @@ export default function BookingBoard({
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-6 py-3 text-sm font-semibold text-navy-950 transition-colors hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {pending && <Loader2 size={16} className="animate-spin" />}
-                {pending ? "Изпращане…" : "Потвърди резервацията"}
+                {pending
+                  ? "Изпращане…"
+                  : isTrainerMode
+                    ? "Запиши тренировката"
+                    : "Потвърди резервацията"}
               </button>
             </form>
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+/**
+ * Who the trainer is booking for. Only a name and one way to reach them are required —
+ * the point is to book someone who phoned and may have no email at all.
+ */
+function StudentFields({ errors }: { errors?: Record<string, string> }) {
+  return (
+    <div className="space-y-3 rounded-lg border border-white/10 bg-navy-900 p-4">
+      <p className="text-xs uppercase tracking-wide text-white/40">Ученик</p>
+      <div className="grid grid-cols-2 gap-3">
+        <TextField
+          name="firstName"
+          label="Име"
+          placeholder="Иван"
+          autoComplete="off"
+          required
+          error={errors?.firstName}
+        />
+        <TextField
+          name="lastName"
+          label="Фамилия"
+          placeholder="Петров"
+          autoComplete="off"
+          error={errors?.lastName}
+        />
+      </div>
+      <TextField
+        name="phone"
+        label="Телефон"
+        type="tel"
+        autoComplete="off"
+        placeholder="0888 123 456"
+        error={errors?.phone}
+      />
+      <TextField
+        name="email"
+        label="Имейл"
+        type="email"
+        autoComplete="off"
+        placeholder="по избор"
+        hint="Телефон или имейл — поне едно. С имейл ученикът получава потвърждение."
+        error={errors?.email}
+      />
     </div>
   );
 }

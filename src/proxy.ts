@@ -16,7 +16,10 @@ import { getToken } from "next-auth/jwt";
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  if (!pathname.startsWith("/admin")) return NextResponse.next();
+  const isAdminArea = pathname.startsWith("/admin");
+  const isTrainerArea = pathname.startsWith("/trainer");
+
+  if (!isAdminArea && !isTrainerArea) return NextResponse.next();
 
   const token = await getToken({
     req: request,
@@ -31,7 +34,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (token.role !== "ADMIN") {
+  // /trainer only needs a session here. Someone promoted a minute ago still carries a
+  // USER role in their cookie for up to five minutes, and bouncing them from the
+  // dashboard the promotion email just pointed them to would look broken. requireTrainer()
+  // checks the database, so it makes the real decision for this section.
+  if (isAdminArea && token.role !== "ADMIN") {
     const loginUrl = new URL("/login", request.nextUrl);
     loginUrl.searchParams.set("error", "forbidden");
     return NextResponse.redirect(loginUrl);
@@ -42,5 +49,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Static assets and the auth endpoints must stay reachable.
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/trainer/:path*"],
 };

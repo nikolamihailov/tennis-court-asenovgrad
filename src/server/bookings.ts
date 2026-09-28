@@ -4,15 +4,38 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { db } from "@/lib/db";
 import { clubDateMinuteToUtc, addDaysToIsoDate, clubToday } from "@/lib/time";
-import { bookingTotal, clampRackets, type BookingDuration } from "@/lib/pricing";
+import { bookingTotal, clampRackets, trainerFeeFor, type BookingDuration } from "@/lib/pricing";
 import { BOOKING_HORIZON_DAYS, buildSlots, loadDayBookings } from "./availability";
 import { toCourtPrices } from "./courts";
+import { getActiveTrainer, loadTrainerDay } from "./trainers";
 import type { BookingStatus, CancelledBy } from "@/generated/prisma/enums";
 
 /** Postgres SQLSTATE for an exclusion constraint violation. */
 const EXCLUSION_VIOLATION = "23P01";
 
 const TAKEN_MESSAGE = "Този час вече е зает. Моля, изберете друг.";
+
+const TRAINER_TAKEN_MESSAGE = "Треньорът вече е зает в този час. Моля, изберете друг.";
+
+/** Which of the two overlap constraints fired, as a message for the customer. */
+function takenMessage(error: unknown): string {
+  return errorText(error).includes("Booking_trainer_no_overlap")
+    ? TRAINER_TAKEN_MESSAGE
+    : TAKEN_MESSAGE;
+}
+
+/** Everything an error says about itself, for matching a constraint name in it. */
+function errorText(error: unknown): string {
+  if (!error || typeof error !== "object") return String(error);
+  const candidate = error as { message?: string; meta?: unknown; cause?: unknown };
+  let text = candidate.message ?? "";
+  try {
+    text += JSON.stringify(candidate.meta ?? "");
+  } catch {
+    // Circular meta: the message alone will have to do.
+  }
+  return candidate.cause ? text + errorText(candidate.cause) : text;
+}
 
 /** How many times to retry a booking insert that hit a duplicate reference. */
 const REFERENCE_ATTEMPTS = 3;
@@ -57,6 +80,18 @@ export type BookingDTO = {
     phone: string | null;
     isGuest: boolean;
   };
+  /** The trainer booked with the court, or null for a plain court booking. */
+  trainer: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    image: string | null;
+  } | null;
+  /** The trainer's share of `totalPrice`. Null without a trainer. */
+  trainerFee: number | null;
+  /** Entered by the trainer for a student, rather than by the customer. */
+  bookedByTrainer: boolean;
 };
 
 const bookingInclude = {
@@ -71,12 +106,21 @@ const bookingInclude = {
       isGuest: true,
     },
   },
+  trainer: {
+    select: { id: true, email: true, firstName: true, lastName: true, image: true },
+  },
 } as const;
 
+type Money = { toString(): string };
+
 type BookingRow = {
-  totalPrice: { toString(): string };
+  totalPrice: Money;
+  trainerFee: Money | null;
   manageTokenHash?: string | null;
-} & Omit<BookingDTO, "totalPrice" | "hasEnded" | "customerCanChange" | "durationMinutes">;
+} & Omit<
+  BookingDTO,
+  "totalPrice" | "trainerFee" | "hasEnded" | "customerCanChange" | "durationMinutes"
+>;
 
 /** Whether the customer may still cancel or move a booking themselves. */
 function customerCanChange(
@@ -98,6 +142,7 @@ function toBookingDTO(row: BookingRow): BookingDTO {
   return {
     ...booking,
     totalPrice: Number(booking.totalPrice.toString()),
+    trainerFee: booking.trainerFee === null ? null : Number(booking.trainerFee.toString()),
     durationMinutes: Math.round(
       (booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000,
     ),
@@ -166,6 +211,13 @@ export type CreateBookingInput = {
   bookedAsGuest: boolean;
   racketCount?: number;
   lighting?: boolean;
+  /** Book this trainer for the session too. */
+  trainerId?: string;
+  /**
+   * The trainer is entering this for a student. Their weekly hours do not apply — they
+   * can agree any time — but their other sessions and time off still do.
+   */
+  bookedByTrainer?: boolean;
 };
 
 /**
@@ -180,7 +232,8 @@ export type CreateBookingInput = {
 export async function resolveGuestUser(input: {
   email: string;
   firstName: string;
-  lastName: string;
+  /** Optional only for students a trainer books by phone; the guest form requires it. */
+  lastName?: string;
   phone?: string;
 }): Promise<{ id: string; email: string }> {
   const existing = await db.user.findUnique({
@@ -205,7 +258,7 @@ export async function resolveGuestUser(input: {
     if (existing.isGuest) {
       const patch: Record<string, string> = {};
       if (!existing.firstName) patch.firstName = input.firstName;
-      if (!existing.lastName) patch.lastName = input.lastName;
+      if (!existing.lastName && input.lastName) patch.lastName = input.lastName;
       if (!existing.phone && input.phone) patch.phone = input.phone;
 
       if (Object.keys(patch).length > 0) {
@@ -222,7 +275,7 @@ export async function resolveGuestUser(input: {
       firstName: input.firstName,
       lastName: input.lastName,
       phone: input.phone,
-      name: `${input.firstName} ${input.lastName}`.trim(),
+      name: [input.firstName, input.lastName].filter(Boolean).join(" "),
       isGuest: true,
       role: "USER",
     },
@@ -276,14 +329,31 @@ export async function createBooking(
     );
   }
 
+  // The fee comes from the trainer's current rate on the server, like the court price.
+  let trainerFee: number | null = null;
+  if (input.trainerId) {
+    const trainer = await getActiveTrainer(input.trainerId);
+    if (!trainer) {
+      throw new BookingError("Избраният треньор не приема тренировки.", "trainerId");
+    }
+    if (trainer.id === userId) {
+      throw new BookingError("Не може да запишете тренировка със себе си.", "trainerId");
+    }
+    trainerFee = trainerFeeFor(trainer.hourlyRate, input.duration);
+  }
+
   const totalPrice = bookingTotal({
     courtPrice: toCourtPrices(court)[input.duration],
     racketCount,
     lighting,
     isIndoor: court.isIndoor,
+    trainerFee: trainerFee ?? 0,
   });
 
-  const { startsAt, endsAt } = await assertSlotBookable(court, input);
+  const { startsAt, endsAt } = await assertSlotBookable(court, input, {
+    trainerId: input.trainerId,
+    trainerAnyHours: input.bookedByTrainer && Boolean(input.trainerId),
+  });
   const manageToken = generateManageToken();
 
   // References are random, so a collision is possible even if unlikely. Retrying turns
@@ -304,6 +374,9 @@ export async function createBooking(
           notes: input.notes,
           bookedAsGuest: input.bookedAsGuest,
           manageTokenHash: manageToken.hash,
+          trainerId: input.trainerId ?? null,
+          trainerFee,
+          bookedByTrainer: Boolean(input.bookedByTrainer),
         },
         include: bookingInclude,
       });
@@ -311,7 +384,7 @@ export async function createBooking(
       return { booking: toBookingDTO(booking), manageToken: manageToken.token };
     } catch (error) {
       if (isExclusionViolation(error)) {
-        throw new BookingError(TAKEN_MESSAGE, "startMinute");
+        throw new BookingError(takenMessage(error), "startMinute");
       }
       if (isReferenceCollision(error) && attempt < REFERENCE_ATTEMPTS - 1) {
         continue;
@@ -333,12 +406,17 @@ type SlotRequest = { date: string; startMinute: number; duration: BookingDuratio
  * against the same generator the booking page renders from, so the only starts accepted
  * are the ones customers are actually shown — full hours, plus the half hours that fill
  * a gap. See buildSlots(). `excludeBookingId` is the booking being moved, which must not
- * count as blocking its own new time.
+ * count as blocking its own new time. With `trainerId`, the trainer's hours, sessions and
+ * time off apply too.
  */
 async function assertSlotBookable(
   court: { id: string; openingHour: number; closingHour: number },
   request: SlotRequest,
-  excludeBookingId?: string,
+  {
+    excludeBookingId,
+    trainerId,
+    trainerAnyHours,
+  }: { excludeBookingId?: string; trainerId?: string; trainerAnyHours?: boolean } = {},
 ): Promise<{ startsAt: Date; endsAt: Date }> {
   if (
     request.startMinute < court.openingHour * 60 ||
@@ -362,12 +440,18 @@ async function assertSlotBookable(
     );
   }
 
-  const dayBookings = await loadDayBookings([court.id], request.date, excludeBookingId);
+  const [dayBookings, trainer] = await Promise.all([
+    loadDayBookings([court.id], request.date, excludeBookingId),
+    trainerId
+      ? loadTrainerDay(trainerId, request.date, { excludeBookingId, anyHours: trainerAnyHours })
+      : undefined,
+  ]);
   const slot = buildSlots({
     court,
     isoDate: request.date,
     duration: request.duration,
     bookings: dayBookings.get(court.id) ?? [],
+    trainer,
     now: new Date(),
   }).find((candidate) => candidate.start === request.startMinute);
 
@@ -377,9 +461,14 @@ async function assertSlotBookable(
   if (slot?.reason === "booked") {
     throw new BookingError(TAKEN_MESSAGE, "startMinute");
   }
+  if (slot?.reason === "trainer") {
+    throw new BookingError(TRAINER_TAKEN_MESSAGE, "startMinute");
+  }
   if (!slot) {
     throw new BookingError(
-      "Този начален час не се предлага. Моля, изберете от списъка.",
+      trainerId
+        ? "Треньорът не работи в този час. Моля, изберете от списъка."
+        : "Този начален час не се предлага. Моля, изберете от списъка.",
       "startMinute",
     );
   }
@@ -426,7 +515,11 @@ function isExclusionViolation(error: unknown): boolean {
   if (candidate.cause && isExclusionViolation(candidate.cause)) return true;
 
   const message = error instanceof Error ? error.message : "";
-  return message.includes("Booking_no_overlap") || message.includes(EXCLUSION_VIOLATION);
+  return (
+    message.includes("Booking_no_overlap") ||
+    message.includes("Booking_trainer_no_overlap") ||
+    message.includes(EXCLUSION_VIOLATION)
+  );
 }
 
 export async function getBookingByReference(
@@ -519,6 +612,7 @@ export async function rescheduleBooking(
       endsAt: true,
       racketCount: true,
       lighting: true,
+      trainerId: true,
       court: {
         select: {
           id: true,
@@ -547,7 +641,24 @@ export async function rescheduleBooking(
     );
   }
 
-  const { startsAt, endsAt } = await assertSlotBookable(court, request, bookingId);
+  // A session stays with its trainer when moved, so the trainer has to be free at the new
+  // time and still taking sessions at all. Their fee follows the current rate, the same as
+  // the court price does.
+  let trainerFee: number | null = null;
+  if (existing.trainerId) {
+    const trainer = await getActiveTrainer(existing.trainerId);
+    if (!trainer) {
+      throw new BookingError(
+        "Треньорът вече не приема тренировки. Откажете резервацията и изберете друг треньор.",
+      );
+    }
+    trainerFee = trainerFeeFor(trainer.hourlyRate, request.duration);
+  }
+
+  const { startsAt, endsAt } = await assertSlotBookable(court, request, {
+    excludeBookingId: bookingId,
+    trainerId: existing.trainerId ?? undefined,
+  });
 
   if (
     startsAt.getTime() === existing.startsAt.getTime() &&
@@ -561,6 +672,7 @@ export async function rescheduleBooking(
     racketCount: existing.racketCount,
     lighting: existing.lighting,
     isIndoor: court.isIndoor,
+    trainerFee: trainerFee ?? 0,
   });
 
   const manageToken = generateManageToken();
@@ -572,6 +684,7 @@ export async function rescheduleBooking(
         startsAt,
         endsAt,
         totalPrice,
+        trainerFee,
         manageTokenHash: manageToken.hash,
         rescheduledAt: new Date(),
       },
@@ -581,7 +694,7 @@ export async function rescheduleBooking(
     return { booking: toBookingDTO(booking), manageToken: manageToken.token };
   } catch (error) {
     if (isExclusionViolation(error)) {
-      throw new BookingError(TAKEN_MESSAGE, "startMinute");
+      throw new BookingError(takenMessage(error), "startMinute");
     }
     if (isRecordNotFound(error)) {
       throw new BookingError("Резервацията е отказана и не може да бъде преместена.");
@@ -628,6 +741,8 @@ function isRecordNotFound(error: unknown): boolean {
 export type BookingFilters = {
   status?: BookingStatus;
   courtId?: string;
+  /** Only this trainer's sessions. */
+  trainerId?: string;
   from?: Date;
   to?: Date;
   search?: string;
@@ -648,6 +763,7 @@ export async function listBookings(filters: BookingFilters = {}): Promise<Bookin
     where: {
       status: filters.status,
       courtId: filters.courtId,
+      trainerId: filters.trainerId,
       startsAt:
         filters.from || filters.to ? { gte: filters.from, lte: filters.to } : undefined,
       ...(filters.search

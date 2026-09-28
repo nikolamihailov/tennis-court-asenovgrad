@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { addDaysToIsoDate, clubDateParts, toClubIsoDate } from "@/lib/time";
+import type { Role } from "@/generated/prisma/enums";
 
 export type AnalyticsRange = 7 | 30 | 90;
 
@@ -151,27 +152,32 @@ export type UserSummary = {
   firstName: string | null;
   lastName: string | null;
   phone: string | null;
-  role: string;
+  role: Role;
   isGuest: boolean;
   createdAt: Date;
   bookingCount: number;
   lastBookingAt: Date | null;
+  /** Hourly rate, for trainers and former trainers. */
+  trainerRate: number | null;
 };
 
 /** Users for the admin list, with booking counts. */
-export async function listUsers(search?: string): Promise<UserSummary[]> {
+export async function listUsers(search?: string, role?: Role): Promise<UserSummary[]> {
   const insensitive = { mode: "insensitive" as const };
 
   const users = await db.user.findMany({
-    where: search
-      ? {
-          OR: [
-            { email: { contains: search, ...insensitive } },
-            { firstName: { contains: search, ...insensitive } },
-            { lastName: { contains: search, ...insensitive } },
-          ],
-        }
-      : undefined,
+    where: {
+      role,
+      ...(search
+        ? {
+            OR: [
+              { email: { contains: search, ...insensitive } },
+              { firstName: { contains: search, ...insensitive } },
+              { lastName: { contains: search, ...insensitive } },
+            ],
+          }
+        : {}),
+    },
     select: {
       id: true,
       email: true,
@@ -181,6 +187,7 @@ export async function listUsers(search?: string): Promise<UserSummary[]> {
       role: true,
       isGuest: true,
       createdAt: true,
+      trainerProfile: { select: { hourlyRate: true } },
       _count: { select: { bookings: true } },
       bookings: {
         orderBy: { startsAt: "desc" },
@@ -203,5 +210,8 @@ export async function listUsers(search?: string): Promise<UserSummary[]> {
     createdAt: user.createdAt,
     bookingCount: user._count.bookings,
     lastBookingAt: user.bookings[0]?.startsAt ?? null,
+    trainerRate: user.trainerProfile
+      ? Number(user.trainerProfile.hourlyRate.toString())
+      : null,
   }));
 }

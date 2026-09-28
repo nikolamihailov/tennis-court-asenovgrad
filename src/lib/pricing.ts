@@ -49,17 +49,34 @@ export type BookingExtras = {
  *
  * Lighting is only chargeable on outdoor courts — the indoor court is lit anyway — so
  * `isIndoor` is required here rather than trusting the caller to have checked.
+ *
+ * `trainerFee` is the already-computed fee for the session (see trainerFeeFor()), or 0
+ * when no trainer was booked.
  */
 export function bookingTotal({
   courtPrice,
   racketCount,
   lighting,
   isIndoor,
-}: BookingExtras & { courtPrice: number; isIndoor: boolean }): number {
+  trainerFee = 0,
+}: BookingExtras & { courtPrice: number; isIndoor: boolean; trainerFee?: number }): number {
   const rackets = clampRackets(racketCount) * RACKET_PRICE;
   const floodlights = lighting && !isIndoor ? LIGHTING_PRICE : 0;
 
-  return courtPrice + rackets + floodlights;
+  return roundCents(courtPrice + rackets + floodlights + trainerFee);
+}
+
+/**
+ * A trainer's fee for one session. Unlike courts, trainers charge by the hour, so a
+ * 90-minute session is 1.5 × the rate — rounded to the cent so the preview in the browser
+ * and the stored amount can never differ by a floating-point hair.
+ */
+export function trainerFeeFor(hourlyRate: number, duration: number): number {
+  return roundCents((hourlyRate * duration) / 60);
+}
+
+function roundCents(amount: number): number {
+  return Math.round(amount * 100) / 100;
 }
 
 /** Force a racket count into the allowed range. */
