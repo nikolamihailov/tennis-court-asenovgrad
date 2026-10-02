@@ -1,7 +1,7 @@
 import Hero from "@/components/Hero";
 import BookingWidget from "@/components/BookingWidget";
 import Courts from "@/components/Courts";
-import Trainers from "@/components/Trainers";
+/* import Trainers from "@/components/Trainers"; */
 import Amenities from "@/components/Amenities";
 import AboutContact from "@/components/AboutContact";
 import { listActiveCourts } from "@/server/courts";
@@ -16,7 +16,7 @@ export default async function Home() {
       <Hero />
       <BookingWidget courts={courts} defaultDate={clubToday()} />
       <Courts courts={courts} />
-      <Trainers trainers={trainers} />
+      {/* <Trainers trainers={trainers} /> */}
       <Amenities />
       <AboutContact />
     </>
