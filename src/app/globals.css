@@ -49,6 +49,45 @@
   }
 }
 
+/*
+ * Thin brand-green scrollbars, on the page and on every scrollable element.
+ *
+ * Firefox and Chromium 121+ read the standard scrollbar-width / scrollbar-color. Once
+ * a Chromium browser sees scrollbar-color it ignores ::-webkit-scrollbar entirely, so
+ * the pseudo-element rules sit behind @supports and only reach browsers without the
+ * standard properties (Safari, older Chrome/Edge).
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-green-500) var(--color-navy-900);
+}
+
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-navy-900);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-green-500);
+    border-radius: 9999px;
+    /* Border in the track colour insets the thumb so it reads thinner than the gutter. */
+    border: 2px solid var(--color-navy-900);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-green-400);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: var(--color-navy-900);
+  }
+}
+
 body {
   background: var(--color-navy-950);
   color: #ffffff;
