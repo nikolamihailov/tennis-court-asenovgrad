@@ -9,6 +9,83 @@ See [ROADMAP.md](./ROADMAP.md) for what shipped in each version and what was def
 ### Live Demo: 
 [<img alt="Play Button" src="https://user-images.githubusercontent.com/114406139/211439129-37c7a037-dde4-49d6-bf62-4ffc4f315fa9.PNG" />](https://tennis-court-asenovgrad.vercel.app/)
 
+## Screenshots
+
+> Taken against a local database filled with demo data — names, phone numbers and
+> bookings are made up.
+
+### Customer site
+
+**Home page** — hero, contact details and the quick availability search.
+
+![Home page](docs/screenshots/01-home.jpg)
+
+**Booking a court** — pick a date, duration and optional trainer. The slot grid shows
+only times when both the court and the trainer are free, and the summary prices court,
+trainer, rackets and floodlights.
+
+![Booking page with a trainer and a selected slot](docs/screenshots/02-booking.png)
+
+**Confirmation** — the booking reference, details and total, with a link to change it.
+
+![Booking confirmation](docs/screenshots/03-confirmation.png)
+
+**Reschedule or cancel** — customers can move or cancel a booking up to 2 hours before
+it starts, from their profile or the link in the confirmation email.
+
+![Rescheduling a booking](docs/screenshots/04-reschedule.png)
+
+**Profile** — personal details plus upcoming and past bookings.
+
+![Customer profile with booking history](docs/screenshots/05-profile.png)
+
+**Mobile** — the whole site is responsive.
+
+<p>
+  <img src="docs/screenshots/13-mobile-home.jpg" alt="Home page on mobile" width="300" />
+  &nbsp;
+  <img src="docs/screenshots/14-mobile-booking.png" alt="Booking page on mobile" width="300" />
+</p>
+
+### Admin panel
+
+**Dashboard** — bookings, revenue, occupancy and clients for the last 7 / 30 / 90 days,
+bookings per day, busiest hours, per-court totals and the next bookings.
+
+![Admin dashboard](docs/screenshots/06-admin-dashboard.png)
+
+**Bookings** — filter by status and court, search by reference, name or email, and
+cancel (the customer is emailed).
+
+![Admin bookings list](docs/screenshots/07-admin-bookings.png)
+
+**Courts** — add, edit and deactivate courts; set surface, opening hours and the 60 / 90 /
+120-minute prices.
+
+![Editing a court](docs/screenshots/08-admin-courts.png)
+
+**Users** — everyone who has booked, guests included. Promote a registered user to
+trainer and set their hourly rate.
+
+![Admin users list](docs/screenshots/09-admin-users.png)
+
+### Trainer dashboard
+
+**Overview** — upcoming sessions, hours and fees, and a timeline of the next seven days
+against working hours.
+
+![Trainer dashboard](docs/screenshots/10-trainer-dashboard.png)
+
+**Schedule** — weekly working hours (several windows per day), blocked time off, and the
+bio customers see.
+
+![Trainer schedule editor](docs/screenshots/11-trainer-schedule.png)
+
+**New session** — book a court for a student who phoned in; only a name and a phone or
+email are needed.
+
+![Trainer booking a session for a student](docs/screenshots/12-trainer-book.png)
+
 ## Stack
 
 - Next.js 16 (App Router, Turbopack) + TypeScript
