@@ -236,3 +236,8 @@ npm run db:deploy
 Keep migrations additive (new nullable columns, new tables) so the running code keeps
 working while they apply. See [ROADMAP.md](./ROADMAP.md#deploying-the-database) for the
 full checklist.
+
+## License
+
+Proprietary — © 2026 Nikola Mihaylov. All rights reserved. No use, copying, modification
+or distribution is permitted without written permission. See [LICENSE](./LICENSE).
