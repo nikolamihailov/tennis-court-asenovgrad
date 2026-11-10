@@ -105,19 +105,22 @@ export default function Hero() {
 
           {/* One card with hairline dividers on phones — three loose rows floating over a
               photograph looked like leftover content. Unchanged grid from md up. */}
-          <div className="mt-10 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-navy-950/50 text-left backdrop-blur-sm md:mt-14 md:grid md:grid-cols-3 md:gap-6 md:divide-y-0 md:rounded-none md:border-0 md:bg-transparent md:backdrop-blur-none">
+          {/* From md up each column is as wide as its text rather than a third of the
+              576px copy column, which left ~176px each and wrapped the subtitles. w-max
+              lets the row run a little past that column, into the darkened side. */}
+          <div className="mt-10 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-navy-950/50 text-left backdrop-blur-sm md:mt-14 md:grid md:w-max md:grid-cols-[repeat(3,max-content)] md:gap-10 md:divide-y-0 md:rounded-none md:border-0 md:bg-transparent md:backdrop-blur-none">
             <InfoItem
-              icon={<Phone size={18} />}
+              icon={<Phone size={20} />}
               title="+359 895 558 586"
               subtitle="За въпроси и информация"
             />
             <InfoItem
-              icon={<Clock size={18} />}
+              icon={<Clock size={20} />}
               title="Работно време"
               subtitle="Всеки ден 09:00 – 23:00"
             />
             <InfoItem
-              icon={<LayoutGrid size={18} />}
+              icon={<LayoutGrid size={20} />}
               title="Онлайн резервации"
               subtitle="Бързо и лесно"
             />
@@ -141,8 +144,8 @@ function InfoItem({
     <div className="flex items-start gap-3 px-4 py-3.5 md:p-0">
       <span className="mt-0.5 text-brand-400">{icon}</span>
       <div>
-        <p className="text-sm font-semibold text-white">{title}</p>
-        <p className="text-xs text-white/60">{subtitle}</p>
+        <p className="text-sm font-semibold text-white md:text-base">{title}</p>
+        <p className="mt-0.5 text-sm text-white/60">{subtitle}</p>
       </div>
     </div>
   );
