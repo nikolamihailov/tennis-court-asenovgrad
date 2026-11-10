@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useId } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import {
@@ -139,13 +139,10 @@ export default function CourtForm({
         error={state.errors?.description}
       />
 
-      <TextField
-        id={fieldId("imageUrl")}
-        name="imageUrl"
-        label="Снимка (път или URL)"
-        placeholder="/images/court.jpg"
-        defaultValue={court?.imageUrl ?? "/images/court.jpg"}
-        error={state.errors?.imageUrl}
+      <ImagePicker
+        id={fieldId("image")}
+        currentUrl={court?.imageUrl ?? null}
+        error={state.errors?.image}
       />
 
       <div className="flex flex-wrap gap-6">
@@ -189,6 +186,145 @@ export default function CourtForm({
 
       </div>
     </form>
+  );
+}
+
+/** Same limit and types as src/lib/court-images.ts, checked here for instant feedback. */
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = "image/jpeg,image/png,image/webp";
+const DEFAULT_IMAGE = "/images/court.jpg";
+
+/**
+ * Photo upload with a preview.
+ *
+ * The file travels with the rest of the form to the Server Action, which validates it
+ * again and stores it in Vercel Blob. Without a pick, an edit keeps the current photo.
+ */
+function ImagePicker({
+  id,
+  currentUrl,
+  error,
+}: {
+  id: string;
+  currentUrl: string | null;
+  error?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [remove, setRemove] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  // Object URLs hold the file in memory until revoked.
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
+  // React resets the form's uncontrolled fields after each action, which empties the file
+  // input. The preview and the remove box are React state, so they follow the same event.
+  useEffect(() => {
+    const form = inputRef.current?.form;
+    if (!form) return;
+    const onReset = () => {
+      setPreview(null);
+      setRemove(false);
+      setClientError(null);
+    };
+    form.addEventListener("reset", onReset);
+    return () => form.removeEventListener("reset", onReset);
+  }, []);
+
+  function onPick(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setClientError(null);
+
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      // Rejected here so a 10 MB phone photo fails instantly instead of after the upload.
+      event.target.value = "";
+      setPreview(null);
+      setClientError("Снимката е твърде голяма — максимум 4 MB.");
+      return;
+    }
+
+    setRemove(false);
+    setPreview(URL.createObjectURL(file));
+  }
+
+  function clearPick() {
+    if (inputRef.current) inputRef.current.value = "";
+    setPreview(null);
+    setClientError(null);
+  }
+
+  const shown = preview ?? (remove ? DEFAULT_IMAGE : currentUrl || DEFAULT_IMAGE);
+  const shownError = clientError ?? error;
+  const errorId = shownError ? `${id}-error` : undefined;
+
+  return (
+    <div>
+      <label htmlFor={id} className="block text-xs font-medium text-white/70">
+        Снимка
+      </label>
+
+      <div className="mt-1.5 flex flex-col gap-4 sm:flex-row sm:items-start">
+        {/* A blob: preview cannot go through next/image, so plain <img> for all three cases. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={shown}
+          alt="Снимка на корта"
+          className="h-28 w-44 shrink-0 rounded-lg border border-white/10 object-cover"
+        />
+
+        <div className="min-w-0 flex-1 space-y-2">
+          <input
+            ref={inputRef}
+            id={id}
+            type="file"
+            name="image"
+            accept={ACCEPTED_IMAGE_TYPES}
+            onChange={onPick}
+            aria-invalid={shownError ? true : undefined}
+            aria-describedby={errorId}
+            className="block w-full text-sm text-white/70 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-white/15"
+          />
+          <p className="text-xs text-white/35">JPG, PNG или WebP, до 4 MB.</p>
+
+          {preview && (
+            <button
+              type="button"
+              onClick={clearPick}
+              className="text-xs text-white/60 underline-offset-2 hover:text-white hover:underline"
+            >
+              Откажи новата снимка
+            </button>
+          )}
+
+          {currentUrl && !preview && (
+            <label className="flex items-center gap-2 text-xs text-white/70">
+              <input
+                type="checkbox"
+                name="removeImage"
+                checked={remove}
+                onChange={(event) => setRemove(event.target.checked)}
+                className="h-4 w-4 rounded border-white/20 bg-navy-900 accent-brand-500"
+              />
+              Премахни снимката (ще се показва стандартната)
+            </label>
+          )}
+
+          {shownError && (
+            <p id={errorId} role="alert" className="text-xs text-red-400">
+              {shownError}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

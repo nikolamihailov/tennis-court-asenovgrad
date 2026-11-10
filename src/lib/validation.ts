@@ -126,7 +126,6 @@ export const courtSchema = z.object({
   price90: price,
   price120: price,
   description: optionalText(500),
-  imageUrl: optionalText(500),
   openingHour: z.coerce.number().int().min(0).max(23),
   closingHour: z.coerce.number().int().min(1).max(24),
   isActive: z.coerce.boolean(),

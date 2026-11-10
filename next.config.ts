@@ -11,7 +11,21 @@ const nextConfig: NextConfig = {
         hostname: "lh3.googleusercontent.com",
         pathname: "/**",
       },
+      // Court photos uploaded through the admin panel. See src/lib/court-images.ts.
+      {
+        protocol: "https",
+        hostname: "*.public.blob.vercel-storage.com",
+        pathname: "/courts/**",
+      },
     ],
+  },
+  experimental: {
+    serverActions: {
+      // Court photos are posted to a Server Action, whose default limit is 1 MB. This is
+      // the 4 MB photo cap plus room for the multipart overhead and the other fields.
+      // Vercel's own ceiling for a request body is 4.5 MB, so it cannot go much higher.
+      bodySizeLimit: "4.4mb",
+    },
   },
 };
 

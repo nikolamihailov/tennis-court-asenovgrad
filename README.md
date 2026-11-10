@@ -202,6 +202,12 @@ The app deploys to Vercel. Add a Neon database from the project's **Storage** ta
 injects `DATABASE_URL` automatically. Add `DIRECT_URL` (Neon's *unpooled* string) and the
 rest of the variables from `.env.example` yourself.
 
+Court photos are uploaded from **Кортове** in the admin panel and stored in Vercel Blob.
+Create a Blob store from the same **Storage** tab and connect it to the project; it
+injects `BLOB_READ_WRITE_TOKEN`. To upload while developing locally, copy that token into
+`.env.local`. Without it the form refuses uploads and courts show the bundled default
+photo. Replacing or removing a photo deletes the old file from the store.
+
 ### Migrations run from GitHub Actions, not the build
 
 The build is `prisma generate && next build` and never touches the database. Instead,

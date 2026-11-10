@@ -15,6 +15,12 @@ import {
   fieldErrors,
   trainerRateSchema,
 } from "@/lib/validation";
+import {
+  CourtImageError,
+  deleteCourtImage,
+  isUploadedFile,
+  uploadCourtImage,
+} from "@/lib/court-images";
 import { BookingError, cancelBooking } from "@/server/bookings";
 import {
   grantTrainerRole,
@@ -46,7 +52,6 @@ function parseCourtForm(formData: FormData) {
     price90: formData.get("price90"),
     price120: formData.get("price120"),
     description: formData.get("description"),
-    imageUrl: formData.get("imageUrl"),
     openingHour: formData.get("openingHour"),
     closingHour: formData.get("closingHour"),
     isActive: formData.get("isActive") === "on",
@@ -57,16 +62,33 @@ function parseCourtForm(formData: FormData) {
 /**
  * An emptied optional text field means "clear this", so it has to reach Prisma as `null`.
  * Passing `undefined` would make Prisma skip the column and silently keep the old value,
- * leaving the admin unable to remove a description or image once one is set.
+ * leaving the admin unable to remove a description once one is set.
  */
-function withClearedOptionals<T extends { description?: string; imageUrl?: string }>(
-  data: T,
-) {
+function withClearedOptionals<T extends { description?: string }>(data: T) {
   return {
     ...data,
     description: data.description ?? null,
-    imageUrl: data.imageUrl ?? null,
   };
+}
+
+/**
+ * Upload the photo picked in the court form, if any.
+ *
+ * Runs only after the other fields have validated, so a typo in a price does not leave
+ * an uploaded file behind with no court pointing at it.
+ */
+async function uploadPickedImage(
+  formData: FormData,
+): Promise<{ url?: string; error?: string }> {
+  const file = formData.get("image");
+  if (!isUploadedFile(file)) return {};
+
+  try {
+    return { url: await uploadCourtImage(file) };
+  } catch (error) {
+    if (error instanceof CourtImageError) return { error: error.message };
+    throw error;
+  }
 }
 
 export async function createCourtAction(
@@ -78,7 +100,18 @@ export async function createCourtAction(
   const parsed = parseCourtForm(formData);
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
-  await db.court.create({ data: withClearedOptionals(parsed.data) });
+  const image = await uploadPickedImage(formData);
+  if (image.error) return { errors: { image: image.error } };
+
+  try {
+    await db.court.create({
+      data: { ...withClearedOptionals(parsed.data), imageUrl: image.url ?? null },
+    });
+  } catch (error) {
+    // Nothing references the file if the row was never written.
+    await deleteCourtImage(image.url);
+    throw error;
+  }
 
   revalidatePath("/admin/courts");
   revalidatePath("/");
@@ -97,7 +130,31 @@ export async function updateCourtAction(
   const parsed = parseCourtForm(formData);
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
-  await db.court.update({ where: { id }, data: withClearedOptionals(parsed.data) });
+  const existing = await db.court.findUnique({ where: { id }, select: { imageUrl: true } });
+  if (!existing) return { message: "Кортът не е намерен." };
+
+  const image = await uploadPickedImage(formData);
+  if (image.error) return { errors: { image: image.error } };
+
+  // A new photo replaces the old one; otherwise "remove" clears it; otherwise the column
+  // is left out of the update entirely and keeps whatever it held.
+  const removeImage = formData.get("removeImage") === "on";
+  const imageUrl = image.url ?? (removeImage ? null : undefined);
+
+  try {
+    await db.court.update({
+      where: { id },
+      data: { ...withClearedOptionals(parsed.data), imageUrl },
+    });
+  } catch (error) {
+    await deleteCourtImage(image.url);
+    throw error;
+  }
+
+  // Only once the row points elsewhere is the old file safe to delete.
+  if (imageUrl !== undefined && existing.imageUrl !== imageUrl) {
+    await deleteCourtImage(existing.imageUrl);
+  }
 
   revalidatePath("/admin/courts");
   revalidatePath("/");
