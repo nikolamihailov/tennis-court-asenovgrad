@@ -38,7 +38,9 @@ export default function Courts({ courts }: { courts: CourtDTO[] }) {
           {courts.map((court) => (
             <div
               key={court.id}
-              className="overflow-hidden rounded-2xl bg-navy-800 border border-white/5"
+              // Lift is motion-safe only; the green glow and border still mark the hovered
+              // card for anyone who has asked their system to reduce motion.
+              className="overflow-hidden rounded-2xl border border-white/5 bg-navy-800 transition-[translate,box-shadow,border-color] duration-300 ease-out hover:border-brand-500/50 hover:shadow-[0_18px_44px_-10px] hover:shadow-brand-500/50 motion-safe:hover:-translate-y-1.5"
             >
               <div className="relative h-44 w-full">
                 <Image

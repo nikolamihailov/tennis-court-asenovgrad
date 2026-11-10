@@ -88,6 +88,31 @@
   }
 }
 
+/*
+ * Pointer cursor on everything clickable.
+ *
+ * Tailwind 4's preflight dropped the `cursor: pointer` that v3 gave buttons, so without
+ * this every <button> — log out, filters, slots — showed the plain arrow. Kept in the
+ * base layer so a utility such as `cursor-not-allowed` on a specific button still wins.
+ */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  label:has(> input[type="radio"]:not(:disabled)) {
+    cursor: pointer;
+  }
+
+  input:not(:disabled)::file-selector-button,
+  input:not(:disabled)::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+}
+
 body {
   background: var(--color-navy-950);
   color: #ffffff;
